@@ -11,159 +11,215 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""TextClassier class."""
+"""APIs to train a text classification model."""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+import tempfile
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 from tensorflow_examples.lite.model_maker.core import compat
-from tensorflow_examples.lite.model_maker.core import model_export_format as mef
+from tensorflow_examples.lite.model_maker.core.api import mm_export
+from tensorflow_examples.lite.model_maker.core.export_format import ExportFormat
 from tensorflow_examples.lite.model_maker.core.task import classification_model
 from tensorflow_examples.lite.model_maker.core.task import model_spec as ms
+from tensorflow_examples.lite.model_maker.core.task import model_util
+from tensorflow_examples.lite.model_maker.core.task.metadata_writers.bert.text_classifier import metadata_writer_for_bert_text_classifier as bert_metadata_writer
+from tensorflow_examples.lite.model_maker.core.task.metadata_writers.text_classifier import metadata_writer_for_text_classifier as metadata_writer
+from tensorflow_examples.lite.model_maker.core.task.model_spec import text_spec
 
 
-def create(train_data,
-           model_export_format=mef.ModelExportFormat.TFLITE,
-           model_spec=ms.AverageWordVecModelSpec(),
-           shuffle=False,
-           batch_size=32,
-           epochs=None,
-           validation_data=None):
-  """Loads data and train the model for test classification.
-
-  Args:
-    train_data: Training data.
-    model_export_format: Model export format such as saved_model / tflite.
-    model_spec: Specification for the model.
-    shuffle: Whether the data should be shuffled.
-    batch_size: Batch size for training.
-    epochs: Number of epochs for training.
-    validation_data: Validation data. If None, skips validation process.
-
-  Returns:
-    TextClassifier
-  """
-  if compat.get_tf_behavior() not in model_spec.compat_tf_versions:
-    raise ValueError('Incompatible versions. Expect {}, but got {}.'.format(
-        model_spec.compat_tf_versions, compat.get_tf_behavior()))
-
-  text_classifier = TextClassifier(
-      model_export_format,
-      model_spec,
-      train_data.index_to_label,
-      train_data.num_classes,
-      shuffle=shuffle)
-
-  tf.compat.v1.logging.info('Retraining the models...')
-  text_classifier.train(train_data, validation_data, epochs, batch_size)
-
-  return text_classifier
+def _get_bert_model_info(model_spec, vocab_file, label_file):
+  return bert_metadata_writer.ClassifierSpecificInfo(
+      name=model_spec.name + ' text classifier',
+      version='v1',
+      description=bert_metadata_writer.DEFAULT_DESCRIPTION,
+      input_names=bert_metadata_writer.bert_qa_inputs(
+          ids_name=model_spec.tflite_input_name['ids'],
+          mask_name=model_spec.tflite_input_name['mask'],
+          segment_ids_name=model_spec.tflite_input_name['segment_ids']),
+      tokenizer_type=bert_metadata_writer.Tokenizer.BERT_TOKENIZER,
+      vocab_file=vocab_file,
+      label_file=label_file)
 
 
+def _get_model_info(model_name):
+  return metadata_writer.ModelSpecificInfo(
+      name=model_name + ' text classifier',
+      description='Classify text into predefined categories.',
+      version='v1')
+
+
+@mm_export('text_classifier.TextClassifier')
 class TextClassifier(classification_model.ClassificationModel):
   """TextClassifier class for inference and exporting to tflite."""
 
+  DEFAULT_EXPORT_FORMAT = (ExportFormat.TFLITE, ExportFormat.LABEL,
+                           ExportFormat.VOCAB)
+  ALLOWED_EXPORT_FORMAT = (ExportFormat.TFLITE, ExportFormat.LABEL,
+                           ExportFormat.VOCAB, ExportFormat.SAVED_MODEL,
+                           ExportFormat.TFJS)
+
   def __init__(self,
-               model_export_format,
                model_spec,
                index_to_label,
-               num_classes,
                shuffle=True):
     """Init function for TextClassifier class.
 
     Args:
-      model_export_format: Model export format such as saved_model / tflite.
       model_spec: Specification for the model.
       index_to_label: A list that map from index to label class name.
-      num_classes: Number of label classes.
       shuffle: Whether the data should be shuffled.
     """
     super(TextClassifier, self).__init__(
-        model_export_format,
         model_spec,
         index_to_label,
-        num_classes,
         shuffle,
         train_whole_model=True)
 
-  def get_dataset_fn(self, input_data, global_batch_size, is_training):
-    """Gets a closure to create a dataset."""
+  def create_model(self, with_loss_and_metrics=True):
+    self.model = self.model_spec.create_model(
+        self.num_classes, with_loss_and_metrics=with_loss_and_metrics)
 
-    def _dataset_fn(ctx=None):
-      """Returns tf.data.Dataset for text classifier retraining."""
-      batch_size = ctx.get_per_replica_batch_size(
-          global_batch_size) if ctx else global_batch_size
-      dataset = self._gen_dataset(
-          input_data,
-          batch_size,
-          is_training=is_training,
-          input_pipeline_context=ctx)
-      return dataset
-
-    return _dataset_fn
-
-  def train(self, train_data, validation_data=None, epochs=None, batch_size=32):
+  def train(self,
+            train_data,
+            validation_data=None,
+            epochs=None,
+            batch_size=None,
+            steps_per_epoch=None):
     """Feeds the training data for training."""
+    if batch_size is None:
+      batch_size = self.model_spec.default_batch_size
 
-    train_input_fn = self.get_dataset_fn(
-        train_data, batch_size, is_training=True)
+    if len(train_data) < batch_size:
+      raise ValueError('The size of the train_data (%d) couldn\'t be smaller '
+                       'than batch_size (%d). To solve this problem, set '
+                       'the batch_size smaller or increase the size of the '
+                       'train_data.' % (len(train_data), batch_size))
 
-    validation_steps = 0
-    validation_input_fn = None
-    if validation_data is not None:
-      validation_input_fn = self.get_dataset_fn(
-          validation_data, batch_size, is_training=False)
-      validation_steps = validation_data.size // batch_size
+    train_ds = train_data.gen_dataset(batch_size, is_training=True)
+    validation_ds = validation_data.gen_dataset(
+        batch_size, is_training=False) if validation_data else None
 
-    steps_per_epoch = train_data.size // batch_size
-
-    self.model = self.model_spec.run_classifier(train_input_fn,
-                                                validation_input_fn, epochs,
-                                                steps_per_epoch,
-                                                validation_steps,
-                                                self.num_classes)
+    steps_per_epoch = model_util.get_steps_per_epoch(steps_per_epoch,
+                                                     batch_size, train_data)
+    if steps_per_epoch is not None:
+      train_ds = train_ds.take(steps_per_epoch)
+    self.model = self.model_spec.run_classifier(
+        train_ds=train_ds,
+        validation_ds=validation_ds,
+        epochs=epochs,
+        steps_per_epoch=steps_per_epoch,
+        num_classes=self.num_classes,
+        callbacks=self._keras_callbacks(model_dir=self.model_spec.model_dir))
 
     return self.model
 
-  @staticmethod
-  def _set_batch_size(model, batch_size):
-    """Sets batch size for the model."""
-    for model_input in model.inputs:
-      new_shape = [batch_size] + model_input.shape[1:]
-      model_input.set_shape(new_shape)
-
-  def export(self,
-             tflite_filename,
-             label_filename,
-             vocab_filename,
-             quantized=False,
-             quantization_steps=None,
-             representative_data=None):
-    """Converts the retrained model based on `model_export_format`.
+  def _export_tflite(self,
+                     tflite_filepath,
+                     quantization_config='default',
+                     with_metadata=True,
+                     export_metadata_json_file=False):
+    """Converts the retrained model to tflite format and saves it.
 
     Args:
-      tflite_filename: File name to save tflite model.
-      label_filename: File name to save labels.
-      vocab_filename: File name to save vocabulary.
-      quantized: boolean, if True, save quantized model.
-      quantization_steps: Number of post-training quantization calibration steps
-        to run. Used only if `quantized` is True.
-      representative_data: Representative data used for post-training
-        quantization. Used only if `quantized` is True.
+      tflite_filepath: File path to save tflite model.
+      quantization_config: Configuration for post-training quantization. If
+        'default', sets the `quantization_config` by default according to
+        `self.model_spec`. If None, exports the float tflite model without
+        quantization.
+      with_metadata: Whether the output tflite model contains metadata.
+      export_metadata_json_file: Whether to export metadata in json file. If
+        True, export the metadata in the same directory as tflite model.Used
+        only if `with_metadata` is True.
     """
-    if self.model_export_format != mef.ModelExportFormat.TFLITE:
-      raise ValueError('Model export format %s is not supported currently.' %
-                       self.model_export_format)
+    if quantization_config == 'default':
+      quantization_config = self.model_spec.get_default_quantization_config()
 
     # Sets batch size from None to 1 when converting to tflite.
-    self._set_batch_size(self.model, batch_size=1)
-    self._export_tflite(tflite_filename, label_filename, quantized,
-                        quantization_steps, representative_data)
+    model_util.set_batch_size(self.model, batch_size=1)
+    model_util.export_tflite(self.model, tflite_filepath, quantization_config,
+                             self.model_spec.convert_from_saved_model_tf2)
     # Sets batch size back to None to support retraining later.
-    self._set_batch_size(self.model, batch_size=None)
+    model_util.set_batch_size(self.model, batch_size=None)
 
-    self.model_spec.save_vocab(vocab_filename)
+    if with_metadata:
+      with tempfile.TemporaryDirectory() as temp_dir:
+        tf.compat.v1.logging.info('Vocab file and label file are inside the '
+                                  'TFLite model with metadata.')
+        vocab_filepath = os.path.join(temp_dir, 'vocab.txt')
+        self.model_spec.save_vocab(vocab_filepath)
+        label_filepath = os.path.join(temp_dir, 'labels.txt')
+        self._export_labels(label_filepath)
+
+        export_dir = os.path.dirname(tflite_filepath)
+        if isinstance(self.model_spec, text_spec.BertClassifierModelSpec):
+          model_info = _get_bert_model_info(self.model_spec, vocab_filepath,
+                                            label_filepath)
+          populator = bert_metadata_writer.MetadataPopulatorForBertTextClassifier(
+              tflite_filepath, export_dir, model_info)
+        elif isinstance(self.model_spec, text_spec.AverageWordVecModelSpec):
+          model_info = _get_model_info(self.model_spec.name)
+          populator = metadata_writer.MetadataPopulatorForTextClassifier(
+              tflite_filepath, export_dir, model_info, label_filepath,
+              vocab_filepath)
+        else:
+          raise ValueError('Model Specification is not supported to writing '
+                           'metadata into TFLite. Please set '
+                           '`with_metadata=False` or write metadata by '
+                           'yourself.')
+        populator.populate(export_metadata_json_file)
+
+  @classmethod
+  def create(cls,
+             train_data,
+             model_spec='average_word_vec',
+             validation_data=None,
+             batch_size=None,
+             epochs=3,
+             steps_per_epoch=None,
+             shuffle=False,
+             do_train=True):
+    """Loads data and train the model for test classification.
+
+    Args:
+      train_data: Training data.
+      model_spec: Specification for the model.
+      validation_data: Validation data. If None, skips validation process.
+      batch_size: Batch size for training.
+      epochs: Number of epochs for training.
+      steps_per_epoch: Integer or None. Total number of steps (batches of
+        samples) before declaring one epoch finished and starting the next
+        epoch. If `steps_per_epoch` is None, the epoch will run until the input
+        dataset is exhausted.
+      shuffle: Whether the data should be shuffled.
+      do_train: Whether to run training.
+
+    Returns:
+      An instance based on TextClassifier.
+    """
+    model_spec = ms.get(model_spec)
+    if compat.get_tf_behavior() not in model_spec.compat_tf_versions:
+      raise ValueError('Incompatible versions. Expect {}, but got {}.'.format(
+          model_spec.compat_tf_versions, compat.get_tf_behavior()))
+
+    text_classifier = cls(
+        model_spec, train_data.index_to_label, shuffle=shuffle)
+
+    if do_train:
+      tf.compat.v1.logging.info('Retraining the models...')
+      text_classifier.train(train_data, validation_data, epochs, batch_size,
+                            steps_per_epoch)
+    else:
+      text_classifier.create_model()
+
+    return text_classifier
+
+
+# Shortcut function.
+create = TextClassifier.create
+mm_export('text_classifier.create').export_constant(__name__, 'create')

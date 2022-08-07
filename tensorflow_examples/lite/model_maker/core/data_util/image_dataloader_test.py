@@ -53,17 +53,17 @@ class ImageDataLoaderTest(tf.test.TestCase):
 
   def test_split(self):
     ds = tf.data.Dataset.from_tensor_slices([[0, 1], [1, 1], [0, 0], [1, 0]])
-    data = image_dataloader.ImageClassifierDataLoader(ds, 4, 2, ['pos', 'neg'])
+    data = image_dataloader.ImageClassifierDataLoader(ds, 4, ['pos', 'neg'])
     train_data, test_data = data.split(0.5)
 
-    self.assertEqual(train_data.size, 2)
-    for i, elem in enumerate(train_data.dataset):
+    self.assertEqual(len(train_data), 2)
+    for i, elem in enumerate(train_data._dataset):
       self.assertTrue((elem.numpy() == np.array([i, 1])).all())
     self.assertEqual(train_data.num_classes, 2)
     self.assertEqual(train_data.index_to_label, ['pos', 'neg'])
 
-    self.assertEqual(test_data.size, 2)
-    for i, elem in enumerate(test_data.dataset):
+    self.assertEqual(len(test_data), 2)
+    for i, elem in enumerate(test_data._dataset):
       self.assertTrue((elem.numpy() == np.array([i, 0])).all())
     self.assertEqual(test_data.num_classes, 2)
     self.assertEqual(test_data.index_to_label, ['pos', 'neg'])
@@ -72,10 +72,10 @@ class ImageDataLoaderTest(tf.test.TestCase):
     data = image_dataloader.ImageClassifierDataLoader.from_folder(
         self.image_path)
 
-    self.assertEqual(data.size, 2)
+    self.assertEqual(len(data), 2)
     self.assertEqual(data.num_classes, 2)
     self.assertEqual(data.index_to_label, ['daisy', 'tulips'])
-    for image, label in data.dataset:
+    for image, label in data.gen_dataset():
       self.assertTrue(label.numpy() == 1 or label.numpy() == 0)
       if label.numpy() == 0:
         raw_image_tensor = image_dataloader.load_image(
@@ -85,23 +85,25 @@ class ImageDataLoaderTest(tf.test.TestCase):
             os.path.join(self.image_path, 'tulips', '0.jpeg'))
       self.assertTrue((image.numpy() == raw_image_tensor.numpy()).all())
 
-  def test_load_from_tfds(self):
-    train_data, validation_data, test_data = image_dataloader.load_from_tfds(
-        'beans')
-    self.assertIsInstance(train_data.dataset, tf.data.Dataset)
-    self.assertEqual(train_data.size, 1034)
+  def test_from_tfds(self):
+    # TODO(b/204836815): Remove this once tfds download error is fixed.
+    self.skipTest('Temporarily skip the unittest due to tfds download error.')
+    train_data, validation_data, test_data = (
+        image_dataloader.ImageClassifierDataLoader.from_tfds('beans'))
+    self.assertIsInstance(train_data.gen_dataset(), tf.data.Dataset)
+    self.assertEqual(len(train_data), 1034)
     self.assertEqual(train_data.num_classes, 3)
     self.assertEqual(train_data.index_to_label,
                      ['angular_leaf_spot', 'bean_rust', 'healthy'])
 
-    self.assertIsInstance(validation_data.dataset, tf.data.Dataset)
-    self.assertEqual(validation_data.size, 133)
+    self.assertIsInstance(validation_data.gen_dataset(), tf.data.Dataset)
+    self.assertEqual(len(validation_data), 133)
     self.assertEqual(validation_data.num_classes, 3)
     self.assertEqual(validation_data.index_to_label,
                      ['angular_leaf_spot', 'bean_rust', 'healthy'])
 
-    self.assertIsInstance(test_data.dataset, tf.data.Dataset)
-    self.assertEqual(test_data.size, 128)
+    self.assertIsInstance(test_data.gen_dataset(), tf.data.Dataset)
+    self.assertEqual(len(test_data), 128)
     self.assertEqual(test_data.num_classes, 3)
     self.assertEqual(test_data.index_to_label,
                      ['angular_leaf_spot', 'bean_rust', 'healthy'])

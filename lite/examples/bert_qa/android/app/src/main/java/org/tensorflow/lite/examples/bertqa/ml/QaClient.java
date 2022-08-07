@@ -14,32 +14,26 @@ limitations under the License.
 ==============================================================================*/
 package org.tensorflow.lite.examples.bertqa.ml;
 
+import static com.google.common.base.Verify.verify;
+
 import android.content.Context;
-import android.content.res.AssetFileDescriptor;
-import android.content.res.AssetManager;
-import android.support.annotation.WorkerThread;
 import android.util.Log;
+import androidx.annotation.WorkerThread;
 import com.google.common.base.Joiner;
-import java.io.BufferedReader;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.support.metadata.MetadataExtractor;
+import org.tensorflow.lite.support.metadata.schema.TensorMetadata;
 
 /** Interface to load TfLite model and provide predictions. */
 public class QaClient implements AutoCloseable {
   private static final String TAG = "BertDemo";
-  private static final String MODEL_PATH = "model.tflite";
-  private static final String DIC_PATH = "vocab.txt";
 
   private static final int MAX_ANS_LEN = 32;
   private static final int MAX_QUERY_LEN = 64;
@@ -48,6 +42,12 @@ public class QaClient implements AutoCloseable {
   private static final int PREDICT_ANS_NUM = 5;
   private static final int NUM_LITE_THREADS = 4;
 
+  private static final String IDS_TENSOR_NAME = "ids";
+  private static final String MASK_TENSOR_NAME = "mask";
+  private static final String SEGMENT_IDS_TENSOR_NAME = "segment_ids";
+  private static final String END_LOGITS_TENSOR_NAME = "end_logits";
+  private static final String START_LOGITS_TENSOR_NAME = "start_logits";
+
   // Need to shift 1 for outputs ([CLS]).
   private static final int OUTPUT_OFFSET = 1;
 
@@ -55,6 +55,7 @@ public class QaClient implements AutoCloseable {
   private final Map<String, Integer> dic = new HashMap<>();
   private final FeatureConverter featureConverter;
   private Interpreter tflite;
+  private MetadataExtractor metadataExtractor = null;
 
   private static final Joiner SPACE_JOINER = Joiner.on(" ");
 
@@ -66,21 +67,16 @@ public class QaClient implements AutoCloseable {
   @WorkerThread
   public synchronized void loadModel() {
     try {
-      ByteBuffer buffer = loadModelFile(this.context.getAssets());
+      ByteBuffer buffer = ModelHelper.loadModelFile(context);
+      metadataExtractor = new MetadataExtractor(buffer);
+      Map<String, Integer> loadedDic = ModelHelper.extractDictionary(metadataExtractor);
+      verify(loadedDic != null, "dic can't be null.");
+      dic.putAll(loadedDic);
+
       Interpreter.Options opt = new Interpreter.Options();
       opt.setNumThreads(NUM_LITE_THREADS);
       tflite = new Interpreter(buffer, opt);
       Log.v(TAG, "TFLite model loaded.");
-    } catch (IOException ex) {
-      Log.e(TAG, ex.getMessage());
-    }
-  }
-
-  @WorkerThread
-  public synchronized void loadDictionary() {
-    try {
-      loadDictionaryFile(this.context.getAssets());
-      Log.v(TAG, "Dictionary loaded.");
     } catch (IOException ex) {
       Log.e(TAG, ex.getMessage());
     }
@@ -100,28 +96,6 @@ public class QaClient implements AutoCloseable {
     dic.clear();
   }
 
-  /** Load tflite model from assets. */
-  public MappedByteBuffer loadModelFile(AssetManager assetManager) throws IOException {
-    try (AssetFileDescriptor fileDescriptor = assetManager.openFd(MODEL_PATH);
-        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor())) {
-      FileChannel fileChannel = inputStream.getChannel();
-      long startOffset = fileDescriptor.getStartOffset();
-      long declaredLength = fileDescriptor.getDeclaredLength();
-      return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
-    }
-  }
-
-  /** Load dictionary from assets. */
-  public void loadDictionaryFile(AssetManager assetManager) throws IOException {
-    try (InputStream ins = assetManager.open(DIC_PATH);
-        BufferedReader reader = new BufferedReader(new InputStreamReader(ins))) {
-      int index = 0;
-      while (reader.ready()) {
-        String key = reader.readLine();
-        dic.put(key, index++);
-      }
-    }
-  }
 
   /**
    * Input: Original content and query for the QA task. Later converted to Feature by
@@ -130,7 +104,7 @@ public class QaClient implements AutoCloseable {
    */
   @WorkerThread
   public synchronized List<QaAnswer> predict(String query, String content) {
-    Log.v(TAG, "TFLite model: " + MODEL_PATH + " running...");
+    Log.v(TAG, "TFLite model: " + ModelHelper.MODEL_PATH + " running...");
     Log.v(TAG, "Convert Feature...");
     Feature feature = featureConverter.convert(query, content);
 
@@ -146,10 +120,72 @@ public class QaClient implements AutoCloseable {
       inputMask[0][j] = feature.inputMask[j];
       segmentIds[0][j] = feature.segmentIds[j];
     }
-    Object[] inputs = {inputIds, inputMask, segmentIds};
+
+    Object[] inputs = new Object[3];
+    boolean useInputMetadata = false;
+    if (metadataExtractor != null && metadataExtractor.getInputTensorCount() == 3) {
+      // If metadata exists and the size of input tensors in metadata is 3, use metadata to treat
+      // the tensor order. Since the order of input tensors can be different for different models,
+      // set the inputs according to input tensor names.
+      useInputMetadata = true;
+      for (int i = 0; i < 3; i++) {
+        TensorMetadata inputMetadata = metadataExtractor.getInputTensorMetadata(i);
+        switch (inputMetadata.name()) {
+          case IDS_TENSOR_NAME:
+            inputs[i] = inputIds;
+            break;
+          case MASK_TENSOR_NAME:
+            inputs[i] = inputMask;
+            break;
+          case SEGMENT_IDS_TENSOR_NAME:
+            inputs[i] = segmentIds;
+            break;
+          default:
+            Log.e(TAG, "Input name in metadata doesn't match the default input tensor names.");
+            useInputMetadata = false;
+        }
+      }
+    }
+    if (!useInputMetadata) {
+      // If metadata doesn't exists or doesn't contain the info, fail back to a hard-coded order.
+      Log.v(TAG, "Use hard-coded order of input tensors.");
+      inputs[0] = inputIds;
+      inputs[1] = inputMask;
+      inputs[2] = segmentIds;
+    }
+
     Map<Integer, Object> output = new HashMap<>();
-    output.put(0, endLogits);
-    output.put(1, startLogits);
+    // Hard-coded idx for output, maybe changed according to metadata below.
+    int endLogitsIdx = 0;
+    int startLogitsIdx = 1;
+    boolean useOutputMetadata = false;
+    if (metadataExtractor != null && metadataExtractor.getOutputTensorCount() == 2) {
+      // If metadata exists and the size of output tensors in metadata is 2, use metadata to treat
+      // the tensor order. Since the order of output tensors can be different for different models,
+      // set the indexs of the outputs according to output tensor names.
+      useOutputMetadata = true;
+      for (int i = 0; i < 2; i++) {
+        TensorMetadata outputMetadata = metadataExtractor.getOutputTensorMetadata(i);
+        switch (outputMetadata.name()) {
+          case END_LOGITS_TENSOR_NAME:
+            endLogitsIdx = i;
+            break;
+          case START_LOGITS_TENSOR_NAME:
+            startLogitsIdx = i;
+            break;
+          default:
+            Log.e(TAG, "Output name in metadata doesn't match the default output tensor names.");
+            useOutputMetadata = false;
+        }
+      }
+    }
+    if (!useOutputMetadata) {
+      Log.v(TAG, "Use hard-coded order of output tensors.");
+      endLogitsIdx = 0;
+      startLogitsIdx = 1;
+    }
+    output.put(endLogitsIdx, endLogits);
+    output.put(startLogitsIdx, startLogits);
 
     Log.v(TAG, "Run inference...");
     tflite.runForMultipleInputsOutputs(inputs, output);
@@ -170,10 +206,10 @@ public class QaClient implements AutoCloseable {
     List<QaAnswer.Pos> origResults = new ArrayList<>();
     for (int start : startIndexes) {
       for (int end : endIndexes) {
-        if (!feature.tokenToOrigMap.containsKey(start)) {
+        if (!feature.tokenToOrigMap.containsKey(start + OUTPUT_OFFSET)) {
           continue;
         }
-        if (!feature.tokenToOrigMap.containsKey(end)) {
+        if (!feature.tokenToOrigMap.containsKey(end + OUTPUT_OFFSET)) {
           continue;
         }
         if (end < start) {

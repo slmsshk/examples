@@ -23,15 +23,10 @@ from unittest.mock import patch
 import tensorflow as tf
 
 from tensorflow_examples.lite.model_maker.core import test_util
-from tensorflow_examples.lite.model_maker.core.data_util.image_dataloader import ImageClassifierDataLoader
 from tensorflow_examples.lite.model_maker.demo import image_classification_demo
+from tflite_model_maker import image_classifier
 
-
-def get_cache_dir():
-  return os.path.join(test_util.get_test_data_path('demo'), 'testdata')
-
-
-from_folder_fn = ImageClassifierDataLoader.from_folder
+from_folder_fn = image_classifier.DataLoader.from_folder
 
 
 def patch_data_loader():
@@ -40,13 +35,14 @@ def patch_data_loader():
   def side_effect(*args, **kwargs):
     tf.compat.v1.logging.info('Train on partial dataset')
     data_loader = from_folder_fn(*args, **kwargs)
-    if data_loader.size > 10:  # Trim dataset to at most 10.
-      data_loader.size = 10
-      data_loader.dataset = data_loader.dataset.take(data_loader.size)
+    if len(data_loader) > 10:  # Trim dataset to at most 10.
+      data_loader._size = 10
+      # TODO(b/171449557): Change this once the dataset is lazily loaded.
+      data_loader._dataset = data_loader._dataset.take(10)
     return data_loader
 
   return patch.object(
-      ImageClassifierDataLoader, 'from_folder', side_effect=side_effect)
+      image_classifier.DataLoader, 'from_folder', side_effect=side_effect)
 
 
 class ImageClassificationDemoTest(tf.test.TestCase):
@@ -56,21 +52,25 @@ class ImageClassificationDemoTest(tf.test.TestCase):
       with tempfile.TemporaryDirectory() as temp_dir:
         # Use cached training data if exists.
         data_dir = image_classification_demo.download_demo_data(
-            cache_dir=get_cache_dir(),
+            cache_dir=test_util.get_cache_dir(temp_dir, 'flower_photos.tgz'),
             file_hash='6f87fb78e9cc9ab41eff2015b380011d')
 
         tflite_filename = os.path.join(temp_dir, 'model.tflite')
-        label_filename = os.path.join(temp_dir, 'label.txt')
+        label_filename = os.path.join(temp_dir, 'labels.txt')
         image_classification_demo.run(
             data_dir,
-            tflite_filename,
-            label_filename,
+            temp_dir,
             spec='efficientnet_lite0',
             epochs=1,
             batch_size=1)
+
         self.assertTrue(tf.io.gfile.exists(tflite_filename))
-        self.assertTrue(tf.io.gfile.exists(label_filename))
+        self.assertGreater(os.path.getsize(tflite_filename), 0)
+
+        self.assertFalse(tf.io.gfile.exists(label_filename))
 
 
 if __name__ == '__main__':
+  # Load compressed models from tensorflow_hub
+  os.environ['TFHUB_MODEL_LOAD_FORMAT'] = 'COMPRESSED'
   tf.test.main()

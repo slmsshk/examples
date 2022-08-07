@@ -1,49 +1,53 @@
-# Image Segmentation Android sample.
+# TensorFlow Lite Image Segmentation Demo
 
-The used model, DeepLab
-[https://ai.googleblog.com/2018/03/semantic-image-segmentation-with.html] is a
-state-of-art deep learning model for semantic image segmentation, where the goal
-is to assign semantic labels (e.g. person, dog, cat) to every pixel in the input
-image.
+### Overview
 
-## Requirements
+This is a camera app that continuously segments the objects in the frames
+seen by your device's back
+camera.
+[Deeplab v3](https://tfhub.dev/tensorflow/lite-model/deeplabv3/1/metadata/2) is
+a state-of-art deep
+learning model for semantic image segmentation, where the goal is to assign
+semantic labels (e.g.
+person, dog, cat) to every pixel in the input image. These instructions
+walk you through building and running the demo on an Android device.
 
-*   Android Studio 3.2 (installed on a Linux, Mac or Windows machine)
-*   An Android device, or an Android Emulator
+The model files are downloaded via Gradle scripts when you build and run the
+app. You don't need todo any steps to download TFLite models into the
+project explicitly.
 
-## Build and run
+This application should be run on a physical Android device.
 
-### Step 1. Clone the TensorFlow examples source code
+![App example showing UI controls.](screenshot1.jpg?raw=true "Screenshot with controls")
 
-Clone the TensorFlow examples GitHub repository to your computer to get the demo
-application.
+![App example without UI controls.](screenshot2.jpg?raw=true "Screenshot without controls")
 
-```
-git clone https://github.com/tensorflow/examples
-```
+## Build the demo using Android Studio
 
-### Step 2. Import the sample app to Android Studio
+### Prerequisites
 
-Open the TensorFlow source code in Android Studio. To do this, open Android
-Studio and select `Import Projects (Gradle, Eclipse ADT, etc.)`, setting the
-folder to `examples/lite/examples/image_segmentation/android`
+* The **[Android Studio](https://developer.android.com/studio/index.html)**
+  IDE (Android Studio 2021.2.1 or newer). This sample has been tested on
+  Android Studio Chipmunk.
 
-### Step 3. Run the Android app
+* A physical Android device with a minimum OS version of SDK 23 (Android 6.0 -
+  Marshmallow) with developer mode enabled. The process of enabling developer
+  mode may vary by device.
 
-Connect the Android device to the computer and be sure to approve any ADB
-permission prompts that appear on your phone. Select `Run -> Run app.` Select
-the deployment target in the connected devices to the device on which the app
-will be installed. This will install the app on the device.
+### Building
 
-To test the app, open the app called `TFL Image Segmentation` on your device.
-Re-installing the app may require you to uninstall the previous installations.
+* Open Android Studio. From the Welcome screen, select Open an existing Android
+  Studio project.
 
-## Resources used:
+* From the Open File or Project window that appears, navigate to and select the
+  tensorflow-lite/examples/image_segmentation/android directory. Click OK.
 
-*   Camera2:
-    https://developer.android.com/reference/android/hardware/camera2/package-summary
-*   Camera2 base sample:
-    https://github.com/android/camera-samples/tree/master/Camera2Formats
-*   TensorFlow Lite: https://www.tensorflow.org/lite
-*   ImageSegmentation model:
-    https://www.tensorflow.org/lite/models/segmentation/overview
+* If it asks you to do a Gradle Sync, click OK.
+
+* With your Android device connected to your computer and developer mode
+  enabled, click on the green Run arrow in Android Studio.
+
+### Models used
+
+Downloading, extraction, and placing the models into the assets folder is
+managed automatically by the download.gradle file.

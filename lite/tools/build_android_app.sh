@@ -15,6 +15,7 @@
 # ==============================================================================
 
 set -e  # Exit immediately when one of the commands fails.
+set -x  # Verbose
 
 # Prerequisites: The following envvars should be set when running this script.
 #  - ANDROID_HOME: Android SDK location (tested with Android SDK 29)
@@ -23,12 +24,8 @@ set -e  # Exit immediately when one of the commands fails.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 EXAMPLES_DIR="$(realpath "${SCRIPT_DIR}/../examples")"
 
-# Keep a list of blacklisted android apps directories which should be excluded
-# from the builds.
-# TODO(b/154114877): Restore smart_reply after resolving aapt_version build issues.
-SKIPPED_BUILDS="
-smart_reply/android
-"
+# Keep a list of android apps which should be excluded from the CI builds.
+SKIPPED_BUILDS=""
 
 function build_android_example {
   # Check if this directory appears in the skipped builds list.
@@ -45,10 +42,10 @@ function build_android_example {
   # Check if the directory contains a gradle wrapper.
   if [[ -x "$1/gradlew" ]]; then
     # Run the "build" task with the gradle wrapper.
-    ./gradlew clean build --stacktrace
+    ./gradlew clean assembleRelease --stacktrace
   elif [[ -x "$1/finish/gradlew" ]]; then
     # Accommodate codelab directory
-    ./finish/gradlew clean build --stacktrace
+    ./finish/gradlew clean assembleRelease --stacktrace
   else
     echo "ERROR: Gradle wrapper could not be found under ${RELATIVE_DIR}."
     exit 1
@@ -61,4 +58,37 @@ function build_android_example {
   echo
 }
 
-build_android_example "$1"
+
+function build_smartreply_aar {
+  # Builds once only after Smart Reply Android app.
+  # It is to use bazel to build and create AAR for custom ops in cc.
+  # TODO(tianlin): To generalize as pre-/post-build.
+  RELATIVE_DIR="${1#"${EXAMPLES_DIR}/"}"
+
+  # Run this only for smart_reply/android.
+  if [[ "${RELATIVE_DIR}" != "smart_reply/android" ]]; then
+    return 0
+  fi
+  WORKSPACE_DIR="${EXAMPLES_DIR}/smart_reply/android/app/libs"
+  echo "=== BUILD STARTED: ${RELATIVE_DIR} :: build_smartreply_aar ==="
+
+  pushd "$1" > /dev/null
+
+  cd "${WORKSPACE_DIR}"
+  echo "-- Building in directory: ${WORKSPACE_DIR} --"
+  /usr/bin/gcc -v
+  bazel version  # Get bazel version info.
+  # Add --sandbox_debug to provide more info for testing.
+  bazel build --sandbox_debug //cc/... //cc:smartreply_runtime_aar
+  bazel test //cc/...
+
+  popd > /dev/null
+
+  echo "=== BUILD STARTED: ${RELATIVE_DIR} :: build_smartreply_aar ==="
+  echo
+  echo
+}
+
+time build_android_example "$1"
+
+time build_smartreply_aar "$1"

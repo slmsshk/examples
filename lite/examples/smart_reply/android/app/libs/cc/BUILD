@@ -16,7 +16,7 @@ load("@org_tensorflow//tensorflow/lite/java:aar_with_jni.bzl", "aar_with_jni")
 
 gen_selected_ops(
     name = "smartreply_ops",
-    model = "//libs/cc/testdata:smartreply.tflite",
+    model = "//cc/testdata:smartreply.tflite",
 )
 
 cc_library(
@@ -60,10 +60,9 @@ tf_cc_test(
     name = "predictor_test",
     srcs = ["predictor_test.cc"],
     data = [
-        "//libs/cc/testdata:smartreply.tflite",
-        "//libs/cc/testdata:smartreply_samples.tsv",
+        "//cc/testdata:smartreply.tflite",
+        "//cc/testdata:smartreply_samples.tsv",
     ],
-    tags = ["no_oss"],
     deps = [
         ":predictor_lib",
         "@org_tensorflow//tensorflow/core:test",
@@ -78,7 +77,6 @@ cc_test(
     name = "extract_feature_op_test",
     size = "small",
     srcs = ["ops/extract_feature_test.cc"],
-    tags = ["no_oss"],
     deps = [
         ":custom_ops",
         "@org_tensorflow//tensorflow/lite:framework",
@@ -93,7 +91,6 @@ cc_test(
     name = "normalize_op_test",
     size = "small",
     srcs = ["ops/normalize_test.cc"],
-    tags = ["no_oss"],
     deps = [
         ":custom_ops",
         "@org_tensorflow//tensorflow/lite:framework",
@@ -108,7 +105,6 @@ cc_test(
     name = "predict_op_test",
     size = "small",
     srcs = ["ops/predict_test.cc"],
-    tags = ["no_oss"],
     deps = [
         ":custom_ops",
         "@org_tensorflow//tensorflow/lite:framework",

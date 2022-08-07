@@ -5,6 +5,10 @@
 
 ## Overview
 
+**Warning**: This is deprecated, and please refers to
+[Sound Classification](../../sound_classification/ios/) ios
+sample with latest technologies.
+
 This app recognizes the specified set of voice commands from the microphone on the device. When the user speaks, commands for which the model is trained are identified.
 
 These instructions will walk you through building and running the demo on an iOS device.
@@ -57,8 +61,8 @@ The percentage displayed is average command recognition over a window duration (
 ## iOS App Details
 
 The app is written entirely in Swift and uses the TensorFlow Lite
-[Swift library](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/experimental/swift)
+[Swift library](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/swift)
 for performing speech commands.
 
 Note: Objective-C developers should use the TensorFlow Lite
-[Objective-C library](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/experimental/objc).
+[Objective-C library](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/objc).

@@ -16,8 +16,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+
 import tensorflow.compat.v2 as tf
-from tensorflow_examples.lite.model_maker.core import model_export_format as mef
 from tensorflow_examples.lite.model_maker.core import test_util
 from tensorflow_examples.lite.model_maker.core.task import classification_model
 
@@ -36,34 +37,45 @@ class MockClassificationModel(classification_model.ClassificationModel):
 
 class ClassificationModelTest(tf.test.TestCase):
 
-  def test_predict_top_k(self):
-    input_shape = [24, 24, 3]
-    num_classes = 2
-    model = MockClassificationModel(
-        model_export_format=mef.ModelExportFormat.TFLITE,
+  def setUp(self):
+    super(ClassificationModelTest, self).setUp()
+    self.num_classes = 2
+    self.model = MockClassificationModel(
         model_spec=None,
         index_to_label=['pos', 'neg'],
-        num_classes=2,
         train_whole_model=False,
         shuffle=False)
-    model.model = test_util.build_model(input_shape, num_classes)
-    data = test_util.get_dataloader(2, input_shape, num_classes)
 
-    topk_results = model.predict_top_k(data, k=2, batch_size=1)
-    for topk_result in topk_results:
-      top1_result, top2_result = topk_result[0], topk_result[1]
-      top1_label, top1_prob = top1_result[0], top1_result[1]
-      top2_label, top2_prob = top2_result[0], top2_result[1]
+  def test_predict_top_k(self):
+    input_shape = [24, 24, 3]
+    self.model.model = test_util.build_model(input_shape, self.num_classes)
+    ds = test_util.get_dataloader(2, input_shape, self.num_classes)
+    raw_data = tf.random.uniform(
+        shape=[2] + input_shape, minval=0, maxval=1, dtype=tf.float32)
 
-      self.assertIn(top1_label, model.index_to_label)
-      self.assertIn(top2_label, model.index_to_label)
-      self.assertNotEqual(top1_label, top2_label)
+    for data in [ds, raw_data]:
+      topk_results = self.model.predict_top_k(data, k=2, batch_size=1)
+      for topk_result in topk_results:
+        top1_result, top2_result = topk_result[0], topk_result[1]
+        top1_label, top1_prob = top1_result[0], top1_result[1]
+        top2_label, top2_prob = top2_result[0], top2_result[1]
 
-      self.assertLessEqual(top1_prob, 1)
-      self.assertGreaterEqual(top1_prob, top2_prob)
-      self.assertGreaterEqual(top2_prob, 0)
+        self.assertIn(top1_label, self.model.index_to_label)
+        self.assertIn(top2_label, self.model.index_to_label)
+        self.assertNotEqual(top1_label, top2_label)
 
-      self.assertEqual(top1_prob + top2_prob, 1.0)
+        self.assertLessEqual(top1_prob, 1)
+        self.assertGreaterEqual(top1_prob, top2_prob)
+        self.assertGreaterEqual(top2_prob, 0)
+
+        self.assertEqual(top1_prob + top2_prob, 1.0)
+
+  def test_export_labels(self):
+    labels_output_file = os.path.join(self.get_temp_dir(), 'label')
+    self.model._export_labels(labels_output_file)
+    with tf.io.gfile.GFile(labels_output_file, 'r') as f:
+      labels = [label.strip() for label in f]
+    self.assertEqual(labels, ['pos', 'neg'])
 
 
 if __name__ == '__main__':

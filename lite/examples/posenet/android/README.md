@@ -1,4 +1,9 @@
-# TensorFlow Lite PoseNet Android Demo
+# See the new pose estimation TFLite Android sample [here](../../pose_estimation/android), which demonstrates both Posenet and Movenet models. This old Posenet sample will no longer be maintained.
+
+<br/> <br/> <br/> <br/>
+
+## TensorFlow Lite PoseNet Android Demo
+
 ### Overview
 This is an app that continuously detects the body parts in the frames seen by
  your device's camera. These instructions walk you through building and running
@@ -12,8 +17,8 @@ This is an app that continuously detects the body parts in the frames seen by
 ### Prerequisites
 
 * If you don't have it already, install **[Android Studio](
- https://developer.android.com/studio/index.html)** 3.2 or
- later, following the instructions on the website.
+ https://developer.android.com/studio/index.html)** 4.2 or
+ above, following the instructions on the website.
 
 * Android device and Android development environment with minimum API 21.
 

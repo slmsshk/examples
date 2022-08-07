@@ -20,35 +20,34 @@ from __future__ import print_function
 
 import numpy as np
 import tensorflow.compat.v2 as tf
-from tensorflow_examples.lite.model_maker.core import model_export_format as mef
+from tensorflow_examples.lite.model_maker.core.data_util import data_util
+from tensorflow_examples.lite.model_maker.core.data_util import dataloader
+from tensorflow_examples.lite.model_maker.core.export_format import ExportFormat
 from tensorflow_examples.lite.model_maker.core.task import custom_model
+from tensorflow_examples.lite.model_maker.core.task import model_util
 
 
 class ClassificationModel(custom_model.CustomModel):
   """"The abstract base class that represents a Tensorflow classification model."""
 
-  def __init__(self, model_export_format, model_spec, index_to_label,
-               num_classes, shuffle, train_whole_model):
+  DEFAULT_EXPORT_FORMAT = (ExportFormat.TFLITE, ExportFormat.LABEL)
+  ALLOWED_EXPORT_FORMAT = (ExportFormat.TFLITE, ExportFormat.LABEL,
+                           ExportFormat.SAVED_MODEL, ExportFormat.TFJS)
+
+  def __init__(self, model_spec, index_to_label, shuffle, train_whole_model):
     """Initialize a instance with data, deploy mode and other related parameters.
 
     Args:
-      model_export_format: Model export format such as saved_model / tflite.
       model_spec: Specification for the model.
       index_to_label: A list that map from index to label class name.
-      num_classes: Number of label classes.
       shuffle: Whether the data should be shuffled.
       train_whole_model: If true, the Hub module is trained together with the
         classification layer on top. Otherwise, only train the top
         classification layer.
     """
-    if model_export_format != mef.ModelExportFormat.TFLITE:
-      raise ValueError('Model export format %s is not supported currently.' %
-                       str(model_export_format))
-
-    super(ClassificationModel, self).__init__(model_export_format, model_spec,
-                                              shuffle)
+    super(ClassificationModel, self).__init__(model_spec, shuffle)
     self.index_to_label = index_to_label
-    self.num_classes = num_classes
+    self.num_classes = len(index_to_label)
     self.train_whole_model = train_whole_model
 
   def evaluate(self, data, batch_size=32):
@@ -61,15 +60,16 @@ class ClassificationModel(custom_model.CustomModel):
     Returns:
       The loss value and accuracy.
     """
-    ds = self._gen_dataset(data, batch_size, is_training=False)
-
+    ds = data.gen_dataset(
+        batch_size, is_training=False, preprocess=self.preprocess)
     return self.model.evaluate(ds)
 
   def predict_top_k(self, data, k=1, batch_size=32):
     """Predicts the top-k predictions.
 
     Args:
-      data: Data to be evaluated.
+      data: Data to be evaluated. Either an instance of DataLoader or just raw
+        data entries such TF tensor or numpy array.
       k: Number of top results to be predicted.
       batch_size: Number of samples per evaluation step.
 
@@ -78,7 +78,11 @@ class ClassificationModel(custom_model.CustomModel):
     """
     if k < 0:
       raise ValueError('K should be equal or larger than 0.')
-    ds = self._gen_dataset(data, batch_size, is_training=False)
+    if isinstance(data, dataloader.DataLoader):
+      ds = data.gen_dataset(
+          batch_size, is_training=False, preprocess=self.preprocess)
+    else:
+      ds = data
 
     predicted_prob = self.model.predict(ds)
     topk_prob, topk_id = tf.math.top_k(predicted_prob, k=k)
@@ -90,28 +94,50 @@ class ClassificationModel(custom_model.CustomModel):
 
     return label_prob
 
-  def _export_tflite(self,
-                     tflite_filename,
-                     label_filename,
-                     quantized=False,
-                     quantization_steps=None,
-                     representative_data=None):
-    """Converts the retrained model to tflite format and saves it.
+  def _export_labels(self, label_filepath):
+    if label_filepath is None:
+      raise ValueError("Label filepath couldn't be None when exporting labels.")
 
-    Args:
-      tflite_filename: File name to save tflite model.
-      label_filename: File name to save labels.
-      quantized: boolean, if True, save quantized model.
-      quantization_steps: Number of post-training quantization calibration steps
-        to run. Used only if `quantized` is True.
-      representative_data: Representative data used for post-training
-        quantization. Used only if `quantized` is True.
-    """
-    super(ClassificationModel,
-          self)._export_tflite(tflite_filename, quantized, quantization_steps,
-                               representative_data)
-
-    with tf.io.gfile.GFile(label_filename, 'w') as f:
+    tf.compat.v1.logging.info('Saving labels in %s', label_filepath)
+    with tf.io.gfile.GFile(label_filepath, 'w') as f:
       f.write('\n'.join(self.index_to_label))
 
-    tf.compat.v1.logging.info('Saved labels in %s.', label_filename)
+  def evaluate_tflite(self, tflite_filepath, data, postprocess_fn=None):
+    """Evaluates the tflite model.
+
+    Args:
+      tflite_filepath: File path to the TFLite model.
+      data: Data to be evaluated.
+      postprocess_fn: Postprocessing function that will be applied to the output
+        of `lite_runner.run` before calculating the probabilities.
+
+    Returns:
+      The evaluation result of TFLite model - accuracy.
+    """
+    ds = data.gen_dataset(
+        batch_size=1, is_training=False, preprocess=self.preprocess)
+
+    predictions, labels = [], []
+
+    lite_runner = model_util.get_lite_runner(tflite_filepath, self.model_spec)
+    for i, (feature, label) in enumerate(data_util.generate_elements(ds)):
+      log_steps = 1000
+      tf.compat.v1.logging.log_every_n(tf.compat.v1.logging.DEBUG,
+                                       'Processing example: #%d\n%s', log_steps,
+                                       i, feature)
+
+      probabilities = lite_runner.run(feature)
+
+      if postprocess_fn:
+        probabilities = postprocess_fn(probabilities)
+      predictions.append(np.argmax(probabilities))
+
+      # Gets the ground-truth labels.
+      label = label[0]
+      if label.size > 1:  # one-hot tensor.
+        label = np.argmax(label)
+      labels.append(label)
+
+    predictions, labels = np.array(predictions), np.array(labels)
+    result = {'accuracy': (predictions == labels).mean()}
+    return result

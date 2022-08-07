@@ -127,7 +127,7 @@ class ModelDataHandler {
     let inferenceStartTime: Date
     let postprocessingStartTime: Date
 
-    // Processing times in miliseconds.
+    // Processing times in milliseconds.
     let preprocessingTime: TimeInterval
     let inferenceTime: TimeInterval
     let postprocessingTime: TimeInterval
@@ -158,7 +158,7 @@ class ModelDataHandler {
   }
 
   // MARK: - Private functions to run model
-  /// Preprocesses given rectangle image to be `Data` of disired size by croping and resizing it.
+  /// Preprocesses given rectangle image to be `Data` of desired size by cropping and resizing it.
   ///
   /// - Parameters:
   ///   - of: Input image to crop and resize.
@@ -176,15 +176,7 @@ class ModelDataHandler {
     }
 
     // Remove the alpha component from the image buffer to get the initialized `Data`.
-    let byteCount =
-      Model.input.batchSize
-      * Model.input.height * Model.input.width
-      * Model.input.channelSize
-    guard
-      let inputData = thumbnail.rgbData(
-        byteCount: byteCount,
-        isModelQuantized: Model.isQuantized
-      )
+    guard let inputData = thumbnail.rgbData(isModelQuantized: Model.isQuantized)
     else {
       os_log("Failed to convert the image buffer to RGB data.", type: .error)
       return nil
@@ -196,7 +188,7 @@ class ModelDataHandler {
   /// Postprocesses output `Tensor`s to `Result` with size of view to render the result.
   ///
   /// - Parameters:
-  ///   - to: Size of view to be displaied.
+  ///   - to: Size of view to be displayed.
   /// - Returns: Postprocessed `Result`. `nil` if it can not be processed.
   private func postprocess(to viewSize: CGSize) -> Result? {
     // MARK: Formats output tensors

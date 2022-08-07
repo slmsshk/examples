@@ -19,13 +19,14 @@ from __future__ import print_function
 
 import csv
 import hashlib
-import json
 import os
 import random
 import tempfile
 
 from absl import logging
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
+from tensorflow_examples.lite.model_maker.core import file_util
+from tensorflow_examples.lite.model_maker.core.api import mm_export
 from tensorflow_examples.lite.model_maker.core.data_util import dataloader
 from tensorflow_examples.lite.model_maker.core.task import model_spec as ms
 
@@ -44,22 +45,22 @@ def _load(tfrecord_file, meta_data_file, model_spec, is_training=None):
 
   dataset = input_pipeline.single_file_dataset(tfrecord_file, name_to_features)
   dataset = dataset.map(
-      model_spec.select_data_from_record,
-      num_parallel_calls=tf.data.experimental.AUTOTUNE)
+      model_spec.select_data_from_record, num_parallel_calls=tf.data.AUTOTUNE)
 
-  with tf.io.gfile.GFile(meta_data_file, 'rb') as reader:
-    meta_data = json.load(reader)
+  meta_data = file_util.load_json_file(meta_data_file)
+
   logging.info(
       'Load preprocessed data and metadata from %s and %s '
       'with size: %d', tfrecord_file, meta_data_file, meta_data['size'])
   return dataset, meta_data
 
 
-def _get_cache_filenames(cache_dir, model_spec, data_name):
+def _get_cache_filenames(cache_dir, model_spec, data_name, is_training):
   """Gets cache tfrecord filename, metada filename and prefix of filenames."""
   hasher = hashlib.md5()
   hasher.update(data_name.encode('utf-8'))
   hasher.update(str(model_spec.get_config()).encode('utf-8'))
+  hasher.update(str(is_training).encode('utf-8'))
   cache_prefix = os.path.join(cache_dir, hasher.hexdigest())
   cache_tfrecord_file = cache_prefix + '.tfrecord'
   cache_meta_data_file = cache_prefix + '_meta_data'
@@ -67,60 +68,26 @@ def _get_cache_filenames(cache_dir, model_spec, data_name):
   return cache_tfrecord_file, cache_meta_data_file, cache_prefix
 
 
-def _write_meta_data(meta_data_file, meta_data):
-  """Writes meta data into file."""
-  with tf.io.gfile.GFile(meta_data_file, 'w') as f:
-    json.dump(meta_data, f)
-
-
-def _get_cache_info(cache_dir, data_name, model_spec):
+def _get_cache_info(cache_dir, data_name, model_spec, is_training):
   """Gets cache related information: whether is cached, related filenames."""
   if cache_dir is None:
     cache_dir = tempfile.mkdtemp()
   tfrecord_file, meta_data_file, file_prefix = _get_cache_filenames(
-      cache_dir, model_spec, data_name)
+      cache_dir, model_spec, data_name, is_training)
   is_cached = tf.io.gfile.exists(tfrecord_file) and tf.io.gfile.exists(
       meta_data_file)
 
   return is_cached, tfrecord_file, meta_data_file, file_prefix
 
 
-class TextClassifierDataLoader(dataloader.DataLoader):
+@mm_export('text_classifier.DataLoader')
+class TextClassifierDataLoader(dataloader.ClassificationDataLoader):
   """DataLoader for text classifier."""
-
-  def __init__(self, dataset, size, num_classes, index_to_label):
-    super(TextClassifierDataLoader, self).__init__(dataset, size)
-    self.num_classes = num_classes
-    self.index_to_label = index_to_label
-
-  def split(self, fraction):
-    """Splits dataset into two sub-datasets with the given fraction.
-
-    Primarily used for splitting the data set into training and testing sets.
-
-    Args:
-      fraction: float, demonstrates the fraction of the first returned
-        subdataset in the original data.
-
-    Returns:
-      The splitted two sub dataset.
-    """
-    ds = self.dataset
-
-    train_size = int(self.size * fraction)
-    trainset = TextClassifierDataLoader(
-        ds.take(train_size), train_size, self.num_classes, self.index_to_label)
-
-    test_size = self.size - train_size
-    testset = TextClassifierDataLoader(
-        ds.skip(train_size), test_size, self.num_classes, self.index_to_label)
-
-    return trainset, testset
 
   @classmethod
   def from_folder(cls,
                   filename,
-                  model_spec=ms.AverageWordVecModelSpec(),
+                  model_spec='average_word_vec',
                   is_training=True,
                   class_labels=None,
                   shuffle=True,
@@ -144,6 +111,7 @@ class TextClassifierDataLoader(dataloader.DataLoader):
     Returns:
       TextDataset containing text, labels and other related info.
     """
+    model_spec = ms.get(model_spec)
     data_root = os.path.abspath(filename)
     folder_name = os.path.basename(data_root)
 
@@ -200,7 +168,7 @@ class TextClassifierDataLoader(dataloader.DataLoader):
                text_column,
                label_column,
                fieldnames=None,
-               model_spec=ms.AverageWordVecModelSpec(),
+               model_spec='average_word_vec',
                is_training=True,
                delimiter=',',
                quotechar='"',
@@ -225,6 +193,7 @@ class TextClassifierDataLoader(dataloader.DataLoader):
     Returns:
       TextDataset containing text, labels and other related info.
     """
+    model_spec = ms.get(model_spec)
     csv_name = os.path.basename(filename)
 
     is_cached, tfrecord_file, meta_data_file, vocab_file = cls._get_cache_info(
@@ -237,16 +206,25 @@ class TextClassifierDataLoader(dataloader.DataLoader):
     if shuffle:
       random.shuffle(lines)
 
-    # Gets labels.
-    label_set = set()
-    for line in lines:
-      label_set.add(line[label_column])
-    label_names = sorted(label_set)
+    # Gets labels: if already loaded labels previously, directly use the
+    # loaded labels. Otherwise, load the labels and sort the labels by name.
+    if model_spec.index_to_label and not is_training:
+      label_names = model_spec.index_to_label
+      label_set = set(label_names)
+    else:
+      label_set = set()
+      for line in lines:
+        label_set.add(line[label_column])
+      label_names = sorted(label_set)
+      model_spec.index_to_label = label_names
 
     # Generates text examples from csv file.
     examples = []
     for i, line in enumerate(lines):
       text, label = line[text_column], line[label_column]
+      if label not in label_set:
+        logging.warning('Skip line: "%s" since label %s is not in label set',
+                        line, label)
       guid = '%s-%d' % (csv_name, i)
       examples.append(classifier_data_lib.InputExample(guid, text, None, label))
 
@@ -263,7 +241,6 @@ class TextClassifierDataLoader(dataloader.DataLoader):
 
     dataset, meta_data = _load(tfrecord_file, meta_data_file, model_spec)
     return TextClassifierDataLoader(dataset, meta_data['size'],
-                                    meta_data['num_classes'],
                                     meta_data['index_to_label'])
 
   @classmethod
@@ -285,13 +262,13 @@ class TextClassifierDataLoader(dataloader.DataLoader):
         'num_classes': len(label_names),
         'index_to_label': label_names
     }
-    _write_meta_data(meta_data_file, meta_data)
+    file_util.write_json_file(meta_data_file, meta_data)
 
   @classmethod
   def _get_cache_info(cls, cache_dir, data_name, model_spec, is_training):
     """Gets cache related information for text classifier."""
     is_cached, tfrecord_file, meta_data_file, file_prefix = _get_cache_info(
-        cache_dir, data_name, model_spec)
+        cache_dir, data_name, model_spec, is_training)
 
     vocab_file = file_prefix + '_vocab'
     if is_cached:
@@ -312,6 +289,7 @@ class TextClassifierDataLoader(dataloader.DataLoader):
       return lines
 
 
+@mm_export('question_answer.DataLoader')
 class QuestionAnswerDataLoader(dataloader.DataLoader):
   """DataLoader for question answering."""
 
@@ -343,9 +321,10 @@ class QuestionAnswerDataLoader(dataloader.DataLoader):
     Returns:
       QuestionAnswerDataLoader object.
     """
+    model_spec = ms.get(model_spec)
     file_base_name = os.path.basename(filename)
     is_cached, tfrecord_file, meta_data_file, _ = _get_cache_info(
-        cache_dir, file_base_name, model_spec)
+        cache_dir, file_base_name, model_spec, is_training)
     # If cached, directly loads data from cache directory.
     if is_cached and is_training:
       dataset, meta_data = _load(tfrecord_file, meta_data_file, model_spec,
@@ -359,10 +338,10 @@ class QuestionAnswerDataLoader(dataloader.DataLoader):
           squad_file=filename)
 
     meta_data, examples, features = cls._generate_tf_record_from_squad_file(
-        filename, model_spec.tokenizer, tfrecord_file, is_training,
-        model_spec.predict_batch_size, model_spec.seq_len, model_spec.query_len,
-        model_spec.doc_stride, version_2_with_negative)
-    _write_meta_data(meta_data_file, meta_data)
+        filename, model_spec, tfrecord_file, is_training,
+        version_2_with_negative)
+
+    file_util.write_json_file(meta_data_file, meta_data)
 
     dataset, meta_data = _load(tfrecord_file, meta_data_file, model_spec,
                                is_training)
@@ -373,13 +352,9 @@ class QuestionAnswerDataLoader(dataloader.DataLoader):
   @classmethod
   def _generate_tf_record_from_squad_file(cls,
                                           input_file_path,
-                                          tokenizer,
+                                          model_spec,
                                           output_path,
                                           is_training,
-                                          predict_batch_size=8,
-                                          max_seq_length=384,
-                                          max_query_length=64,
-                                          doc_stride=128,
                                           version_2_with_negative=False):
     """Generates and saves training/validation data into a tf record file."""
     examples = squad_lib.read_squad_examples(
@@ -399,14 +374,10 @@ class QuestionAnswerDataLoader(dataloader.DataLoader):
     if is_training:
       batch_size = None
     else:
-      batch_size = predict_batch_size
+      batch_size = model_spec.predict_batch_size
 
-    number_of_examples = squad_lib.convert_examples_to_features(
+    number_of_examples = model_spec.convert_examples_to_features(
         examples=examples,
-        tokenizer=tokenizer,
-        max_seq_length=max_seq_length,
-        doc_stride=doc_stride,
-        max_query_length=max_query_length,
         is_training=is_training,
         output_fn=writer.process_feature if is_training else _append_feature,
         batch_size=batch_size)

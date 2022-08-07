@@ -24,52 +24,46 @@ from absl import flags
 from absl import logging
 
 import tensorflow as tf
-from tensorflow_examples.lite.model_maker.core.data_util.text_dataloader import TextClassifierDataLoader
-from tensorflow_examples.lite.model_maker.core.task import model_spec
-from tensorflow_examples.lite.model_maker.core.task import text_classifier
+
+from tflite_model_maker import model_spec
+from tflite_model_maker import text_classifier
+from tflite_model_maker.config import ExportFormat
 
 FLAGS = flags.FLAGS
 
 
 def define_flags():
-  flags.DEFINE_string('tflite_filename', None,
-                      'File name to save tflite model.')
-  flags.DEFINE_string('label_filename', None, 'File name to save labels.')
-  flags.DEFINE_string('vocab_filename', None, 'File name to save vocabulary.')
-  flags.mark_flag_as_required('tflite_filename')
-  flags.mark_flag_as_required('label_filename')
-  flags.mark_flag_as_required('vocab_filename')
+  flags.DEFINE_string('export_dir', None,
+                      'The directory to save exported files.')
+  flags.DEFINE_string('spec', 'mobilebert_classifier',
+                      'The text classifier to run.')
+  flags.mark_flag_as_required('export_dir')
 
 
 def download_demo_data(**kwargs):
   """Downloads demo data, and returns directory path."""
   data_path = tf.keras.utils.get_file(
       fname='SST-2.zip',
-      origin='https://firebasestorage.googleapis.com/v0/b/mtl-sentence-representations.appspot.com/o/data%2FSST-2.zip?alt=media&token=aabc5f6b-e466-44a2-b9b4-cf6337f84ac8',
+      origin='https://dl.fbaipublicfiles.com/glue/data/SST-2.zip',
       extract=True,
       **kwargs)
   return os.path.join(os.path.dirname(data_path), 'SST-2')  # folder name
 
 
-def run(data_dir,
-        tflite_filename,
-        label_filename,
-        vocab_filename,
-        spec='bert_classifier',
-        **kwargs):
+def run(data_dir, export_dir, spec='mobilebert_classifier', **kwargs):
   """Runs demo."""
   # Chooses model specification that represents model.
   spec = model_spec.get(spec)
 
   # Gets training data and validation data.
-  train_data = TextClassifierDataLoader.from_csv(
+  train_data = text_classifier.DataLoader.from_csv(
       filename=os.path.join(os.path.join(data_dir, 'train.tsv')),
       text_column='sentence',
       label_column='label',
       model_spec=spec,
       delimiter='\t',
       is_training=True)
-  validation_data = TextClassifierDataLoader.from_csv(
+  validation_data = text_classifier.DataLoader.from_csv(
       filename=os.path.join(os.path.join(data_dir, 'dev.tsv')),
       text_column='sentence',
       label_column='label',
@@ -85,15 +79,20 @@ def run(data_dir,
   _, acc = model.evaluate(validation_data)
   print('Eval accuracy: %f' % acc)
 
-  # Exports to TFLite format.
-  model.export(tflite_filename, label_filename, vocab_filename)
+  # Exports to TFLite and SavedModel, with label and vocab files.
+  export_format = [
+      ExportFormat.TFLITE,
+      ExportFormat.SAVED_MODEL,
+  ]
+  model.export(export_dir, export_format=export_format)
 
 
 def main(_):
   logging.set_verbosity(logging.INFO)
   data_dir = download_demo_data()
-  run(data_dir, FLAGS.tflite_filename, FLAGS.label_filename,
-      FLAGS.vocab_filename)
+  export_dir = os.path.expanduser(FLAGS.export_dir)
+
+  run(data_dir, export_dir, spec=FLAGS.spec)
 
 
 if __name__ == '__main__':

@@ -8,63 +8,91 @@ model for on-device ML applications.
 
 ## Requirements
 
-* Refer to
-[requirements.txt](https://github.com/tensorflow/examples/blob/master/tensorflow_examples/lite/model_maker/requirements.txt)
-for dependent libraries that're needed to use the library and run the demo code.
+*   Refer to
+    [requirements.txt](https://github.com/tensorflow/examples/blob/master/tensorflow_examples/lite/model_maker/requirements.txt)
+    for dependent libraries that're needed to use the library and run the demo
+    code.
+*   Note that you might also need to install `sndfile` for Audio tasks.
+On Debian/Ubuntu, you can do so by `sudo apt-get install libsndfile1`
 
 ## Installation
 
-Two alternative methods to install Model Maker library with its dependencies.
+There are two ways to install Model Maker.
 
-*   Install directly.
+*   Install a prebuilt pip package:
+    [`tflite-model-maker`](https://pypi.org/project/tflite-model-maker/).
 
 ```shell
-pip install git+https://github.com/tensorflow/examples.git#egg=tensorflow-examples[model_maker]
+pip install tflite-model-maker
 ```
 
-*   Clone the repo from the HEAD, and then install with pip.
+If you want to install nightly version
+[`tflite-model-maker-nightly`](https://pypi.org/project/tflite-model-maker-nightly/),
+please follow the command:
+
+```shell
+pip install tflite-model-maker-nightly
+```
+
+*   Clone the source code from GitHub and install.
 
 ```shell
 git clone https://github.com/tensorflow/examples
-cd examples
-pip install .[model_maker]
+cd examples/tensorflow_examples/lite/model_maker/pip_package
+pip install -e .
 ```
+
+TensorFlow Lite Model Maker depends on TensorFlow
+[pip package](https://www.tensorflow.org/install/pip). For GPU support, please
+refer to TensorFlow's [GPU guide](https://www.tensorflow.org/install/gpu) or
+[installation guide](https://www.tensorflow.org/install).
 
 ## End-to-End Example
 
-For instance, it could have an end-to-end image
-classification example that utilizes this library with just 4 lines of
-code, each of which representing one step of the overall process:
+For instance, it could have an end-to-end image classification example that
+utilizes this library with just 4 lines of code, each of which representing one
+step of the overall process. For more detail, you could refer to
+[Colab for image classification](https://colab.research.google.com/github/tensorflow/tensorflow/blob/master/tensorflow/lite/g3doc/tutorials/model_maker_image_classification.ipynb).
 
-1.   Load input data specific to an on-device ML app.
+*   Step 1. Import the required modules.
 
 ```python
-data = ImageClassifierDataLoader.from_folder('flower_photos/')
+from tflite_model_maker import image_classifier
+from tflite_model_maker.image_classifier import DataLoader
 ```
 
-2. Customize the TensorFlow model.
+*   Step 2. Load input data specific to an on-device ML app.
+
+```python
+data = DataLoader.from_folder('flower_photos/')
+```
+
+*   Step 3. Customize the TensorFlow model.
 
 ```python
 model = image_classifier.create(data)
 ```
 
-3. Evaluate the model.
+*   Step 4. Evaluate the model.
 
 ```python
 loss, accuracy = model.evaluate()
 ```
 
-4.  Export to Tensorflow Lite model.
+*   Step 5. Export to Tensorflow Lite model and label file in `export_dir`.
 
 ```python
-model.export('flower_classifier.tflite', 'flower_label.txt')
+model.export(export_dir='/tmp/')
 ```
 
 ## Notebook
 
-Currently, we support image classification and text classification tasks and
-provide demo code and colab for each of them in demo folder.
+Currently, we support image classification, text classification and question
+answer tasks. Meanwhile, we provide demo code for each of them in demo folder.
 
-* [Colab for image classification](https://github.com/tensorflow/examples/blob/master/tensorflow_examples/lite/model_maker/demo/image_classification.ipynb)
-* [Colab for text classification](https://github.com/tensorflow/examples/blob/master/tensorflow_examples/lite/model_maker/demo/text_classification.ipynb)
-
+*   [Overview for TensorFlow Lite Model Maker](https://www.tensorflow.org/lite/guide/model_maker)
+*   [Python API Reference](https://www.tensorflow.org/lite/api_docs/python/tflite_model_maker)
+*   [Colab for image classification](https://colab.research.google.com/github/tensorflow/tensorflow/blob/master/tensorflow/lite/g3doc/tutorials/model_maker_image_classification.ipynb)
+*   [Colab for text classification](https://colab.research.google.com/github/tensorflow/tensorflow/blob/master/tensorflow/lite/g3doc/tutorials/model_maker_text_classification.ipynb)
+*   [Colab for BERT question answer](https://colab.research.google.com/github/tensorflow/tensorflow/blob/master/tensorflow/lite/g3doc/tutorials/model_maker_question_answer.ipynb)
+*   [Colab for object detection](https://www.tensorflow.org/lite/tutorials/model_maker_object_detection)

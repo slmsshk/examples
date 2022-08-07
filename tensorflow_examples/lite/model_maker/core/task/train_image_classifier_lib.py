@@ -18,11 +18,14 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import logging
 import os
 import tempfile
 
 import tensorflow.compat.v2 as tf
 from tensorflow_examples.lite.model_maker.core.optimization import warmup
+from tensorflow_examples.lite.model_maker.core.task import model_util
+from tensorflow_hub.tools.make_image_classifier import make_image_classifier_lib as hub_lib
 
 DEFAULT_DECAY_SAMPLES = 10000 * 256
 DEFAULT_WARMUP_EPOCHS = 2
@@ -35,10 +38,8 @@ def add_params(hparams, **kwargs):
 
 
 class HParams(
-    collections.namedtuple("HParams", [
-        "train_epochs", "do_fine_tuning", "batch_size", "learning_rate",
-        "dropout_rate", "warmup_steps", "model_dir"
-    ])):
+    collections.namedtuple(
+        "HParams", hub_lib.HParams._fields + ("warmup_steps", "model_dir"))):
   """The hyperparameters for make_image_classifier.
 
   train_epochs: Training will do this many iterations over the dataset.
@@ -61,14 +62,19 @@ class HParams(
 
 def get_default_hparams():
   """Returns a fresh HParams object initialized to default values."""
-  return HParams(
+  default_hub_hparams = hub_lib.get_default_hparams()
+  as_dict = default_hub_hparams._asdict()
+  as_dict.update(
       train_epochs=10,
       do_fine_tuning=False,
       batch_size=64,
       learning_rate=0.004,
       dropout_rate=0.2,
       warmup_steps=None,
-      model_dir=tempfile.mkdtemp())
+      model_dir=tempfile.mkdtemp(),
+  )
+  default_hparams = HParams(**as_dict)
+  return default_hparams
 
 
 def create_optimizer(init_lr, num_decay_steps, num_warmup_steps):
@@ -87,7 +93,58 @@ def create_optimizer(init_lr, num_decay_steps, num_warmup_steps):
   return optimizer
 
 
-def train_model(model, hparams, train_data_and_size, validation_data_and_size):
+def get_default_callbacks(model_dir):
+  """Gets default callbacks."""
+  summary_dir = os.path.join(model_dir, "summaries")
+  summary_callback = tf.keras.callbacks.TensorBoard(summary_dir)
+  # Save checkpoint every 20 epochs.
+
+  checkpoint_path = os.path.join(model_dir, "checkpoint")
+  checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+      checkpoint_path, save_weights_only=True, period=20)
+  return [summary_callback, checkpoint_callback]
+
+
+def hub_train_model(model, hparams, train_ds, validation_ds, steps_per_epoch):
+  """Trains model with the given data and hyperparameters.
+
+  If using a DistributionStrategy, call this under its `.scope()`.
+  Args:
+    model: The tf.keras.Model from _build_model().
+    hparams: A namedtuple of hyperparameters. This function expects
+      .train_epochs: a Python integer with the number of passes over the
+        training dataset;
+      .learning_rate: a Python float forwarded to the optimizer;
+      .momentum: a Python float forwarded to the optimizer;
+      .batch_size: a Python integer, the number of examples returned by each
+        call to the generators.
+    train_ds: tf.data.Dataset, training data to be fed in tf.keras.Model.fit().
+    validation_ds: tf.data.Dataset, validation data to be fed in
+      tf.keras.Model.fit().
+    steps_per_epoch: Integer or None. Total number of steps (batches of samples)
+      before declaring one epoch finished and starting the next epoch. If
+      `steps_per_epoch` is None, the epoch will run until the input dataset is
+      exhausted.
+
+  Returns:
+    The tf.keras.callbacks.History object returned by tf.keras.Model.fit().
+  """
+  loss = tf.keras.losses.CategoricalCrossentropy(
+      label_smoothing=hparams.label_smoothing)
+  model.compile(
+      optimizer=tf.keras.optimizers.SGD(
+          learning_rate=hparams.learning_rate, momentum=hparams.momentum),
+      loss=loss,
+      metrics=["accuracy"])
+
+  return model.fit(
+      train_ds,
+      epochs=hparams.train_epochs,
+      steps_per_epoch=steps_per_epoch,
+      validation_data=validation_ds)
+
+
+def train_model(model, hparams, train_ds, validation_ds, steps_per_epoch):
   """Trains model with the given data and hyperparameters.
 
   Args:
@@ -102,21 +159,22 @@ def train_model(model, hparams, train_data_and_size, validation_data_and_size):
       .warmup_steps: a Python integer, the number of warmup steps for warmup
         schedule on learning rate. If None, default warmup_steps is used;
       .model_dir: a Python string, the location of the model checkpoint files.
-    train_data_and_size: A (data, size) tuple in which data is training data to
-      be fed in tf.keras.Model.fit(), size is a Python integer with the numbers
-      of training.
-    validation_data_and_size: A (data, size) tuple in which data is validation
-      data to be fed in tf.keras.Model.fit(), size is a Python integer with the
-      numbers of validation.
+    train_ds: tf.data.Dataset, training data to be fed in tf.keras.Model.fit().
+    validation_ds: tf.data.Dataset, validation data to be fed in
+      tf.keras.Model.fit().
+    steps_per_epoch: Integer or None. Total number of steps (batches of samples)
+      before declaring one epoch finished and starting the next epoch. If
+      `steps_per_epoch` is None, the epoch will run until the input dataset is
+      exhausted.
 
   Returns:
     The tf.keras.callbacks.History object returned by tf.keras.Model.fit().
   """
-  train_data, train_size = train_data_and_size
-  validation_data, validation_size = validation_data_and_size
-
-  steps_per_epoch = train_size // hparams.batch_size
-  validation_steps = validation_size // hparams.batch_size
+  if steps_per_epoch is None:
+    logging.info(
+        "steps_per_epoch is None, use %d as the estimated steps_per_epoch",
+        model_util.ESTIMITED_STEPS_PER_EPOCH)
+    steps_per_epoch = model_util.ESTIMITED_STEPS_PER_EPOCH
 
   # Learning rate is linear to batch size.
   learning_rate = hparams.learning_rate * hparams.batch_size / 256
@@ -133,19 +191,11 @@ def train_model(model, hparams, train_data_and_size, validation_data_and_size):
 
   loss = tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1)
   model.compile(optimizer=optimizer, loss=loss, metrics=["accuracy"])
-
-  summary_dir = os.path.join(hparams.model_dir, "summaries")
-  summary_callback = tf.keras.callbacks.TensorBoard(summary_dir)
-  # Save checkpoint every 20 epochs.
-  checkpoint_path = os.path.join(hparams.model_dir, "checkpoint")
-  checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-      checkpoint_path, save_weights_only=True, period=20)
+  callbacks = get_default_callbacks(hparams.model_dir)
 
   # Trains the models.
   return model.fit(
-      train_data,
+      train_ds,
       epochs=hparams.train_epochs,
-      steps_per_epoch=steps_per_epoch,
-      validation_data=validation_data,
-      validation_steps=validation_steps,
-      callbacks=[summary_callback, checkpoint_callback])
+      validation_data=validation_ds,
+      callbacks=callbacks)

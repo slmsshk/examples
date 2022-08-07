@@ -15,6 +15,7 @@
 # ==============================================================================
 
 set -e  # Exit immediately when one of the commands fails.
+set -x  # Verbose
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 EXAMPLES_DIR="$(realpath "${SCRIPT_DIR}/../examples")"
@@ -22,21 +23,11 @@ EXAMPLES_DIR="$(realpath "${SCRIPT_DIR}/../examples")"
 PROJECT_EXT=".xcodeproj"
 WORKSPACE_EXT=".xcworkspace"
 
-# Keep a list of blacklisted iOS apps directories which should be excluded from
-# the builds.
+# Keep a list of iOS apps which should be excluded from the CI builds.
 SKIPPED_BUILDS="
 gesture_classification/ios
+classification_by_retrieval/ios
 "
-
-function install_helper_tools {
-  if ! [ -x "$(command -v jq)" ]; then
-    brew install jq
-  fi
-
-  if ! [ -x "$(command -v xcpretty)" ]; then
-    sudo gem install xcpretty
-  fi
-}
 
 function build_ios_example {
   # Check if this directory appears in the skipped builds list.
@@ -51,7 +42,22 @@ function build_ios_example {
   pushd "$1" > /dev/null
 
   # Cleanly install the dependencies
-  pod install --repo-update --clean-install
+  # Retry a few times to workaround intermittent download errors.
+  MAX_RETRY=3
+  INSTALLED=false
+  for i in $(seq 1 ${MAX_RETRY})
+  do
+    echo "Trying to install dependencies... (trial $i)"
+    if pod install --verbose --repo-update --clean-install; then
+      INSTALLED=true
+      break
+    fi
+  done
+
+  if [[ "${INSTALLED}" == false ]]; then
+    echo "Exceeded the max retry limit (${MAX_RETRY}) of pod install command."
+    exit 1
+  fi
 
   # Extract the scheme names.
   PROJECT_NAME="$(find * -maxdepth 0 -type d -name "*${PROJECT_EXT}")"
@@ -87,5 +93,4 @@ function build_ios_example {
   echo
 }
 
-install_helper_tools
 build_ios_example "$1"

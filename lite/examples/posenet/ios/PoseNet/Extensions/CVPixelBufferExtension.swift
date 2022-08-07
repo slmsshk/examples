@@ -30,12 +30,12 @@ extension CVPixelBuffer {
   ///   - to: Size to scale the image to(i.e. image size used while training the model).
   /// - Returns: The cropped and resized image of itself.
   func resize(from source: CGRect, to size: CGSize) -> CVPixelBuffer? {
-    let rect = CGRect(origin: CGPoint(x: 0, y: 0), size: self.size)
+    let rect = CGRect(origin: .zero, size: self.size)
     guard rect.contains(source) else {
       os_log("Resizing Error: source area is out of index", type: .error)
       return nil
     }
-    guard rect.size.width / rect.size.height - source.size.width / source.size.height < 1e-5
+    guard abs(size.width / size.height - source.size.width / source.size.height) < 1e-5
     else {
       os_log(
         "Resizing Error: source image ratio and destination image ratio is different",
@@ -109,18 +109,14 @@ extension CVPixelBuffer {
     return result
   }
 
-  /// Returns the RGB `Data` representation of the given image buffer with the specified
-  /// `byteCount`.
+  /// Returns the RGB `Data` representation of the given image buffer.
   ///
   /// - Parameters:
-  ///   - byteCount: The expected byte count for the RGB data calculated using the values that the
-  ///       model was trained on: `batchSize * imageWidth * imageHeight * componentsCount`.
   ///   - isModelQuantized: Whether the model is quantized (i.e. fixed point values rather than
   ///       floating point values).
   /// - Returns: The RGB data representation of the image buffer or `nil` if the buffer could not be
   ///     converted.
   func rgbData(
-    byteCount: Int,
     isModelQuantized: Bool
   ) -> Data? {
     CVPixelBufferLockBaseAddress(self, .readOnly)

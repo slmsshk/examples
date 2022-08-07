@@ -1,55 +1,46 @@
-# TensorFlow Lite text classification sample
 
-## Overview
+# TensorFlow Lite Text Classification Android Demo
 
-This is an end-to-end example of movie review sentiment classification built
-with TensorFlow 2.0 (Keras API), and trained on IMDB dataset. The demo app
-processes input movie review texts, and classifies its sentiment into negative
-(0) or positive (1).
+### Overview
 
-These instructions walk you through the steps to train and test a simple text
-classification model, export them to TensorFlow Lite format and deploy on a
-mobile app.
+This sample will accept text entered into a field and classify it as either
+positive or negative with a provided confidence score. The supported
+classification models include Word Vector and MobileBERT, both of which are
+generated using
+[TensorFlow's Model Maker](https://www.tensorflow.org/lite/models/modify/model_maker/text_classification).
+These instructions walk you through building and running the demo on an Android
+device.
 
-## Model
+The model files are downloaded via Gradle scripts when you build and run the
+app. You don't need to do any steps to download TFLite models into the project
+explicitly.
 
-See [Text Classification with Movie Reviews](https://www.tensorflow.org/tutorials/keras/basic_text_classification)
-for a step-by-step instruction of building a simple text classification model.
+## Build the demo using Android Studio
 
-## Android app
+### Prerequisites
 
-Follow the steps below to build and run the sample Android app.
+* The **[Android Studio](https://developer.android.com/studio/index.html)** IDE.
+  This sample has been tested on Android Studio Chipmunk.
 
-### Requirements
-
-* Android Studio 3.2 or later.
-Install instructions can be found on [Android Studio](https://developer.android.com/studio/index.html)
-website.
-
-* An Android device or an Android emulator and with API level higher than 15.
+* A physical or emulated Android device with a minimum OS version of SDK 21
+  (Android 5.0) with developer mode enabled. The process of enabling
+  developer mode may vary by device.
 
 ### Building
 
-* Open Android Studio, and from the Welcome screen,
-select `Open an existing Android Studio project`.
+* Open Android Studio. From the Welcome screen, select Open an existing
+    Android Studio project.
 
-* From the Open File or Project window that appears,
-navigate to and select the `text_classification/android` directory
-from wherever you cloned the TensorFlow Lite sample GitHub repo.
+* From the Open File or Project window that appears, navigate to and select
+    the tensorflow-lite/examples/text_classification/android directory.
+    Click OK.
 
-* You may also need to install various platforms and tools according to
-error messages.
+* If it asks you to do a Gradle Sync, click OK.
 
-* If it asks you to use Instant Run, click Proceed Without Instant Run.
+* With your Android device connected developer mode
+    enabled, click on the green Run arrow in Android Studio.
 
-### Running
+### Models used
 
-* You need to have an Android device plugged in with developer options enabled
-at this point. See [here](https://developer.android.com/studio/run/device)
-for more details on setting up developer devices.
-
-* If you already have an Android emulator installed in Android Studio,
-select a virtual device with API level higher than 15.
-
-* Click `Run` to run the demo app on your Android device.
-
+Downloading, extraction, and placing the models into the assets folder is
+managed automatically by the download_model.gradle file.

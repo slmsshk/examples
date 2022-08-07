@@ -35,18 +35,15 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
-import android.hardware.camera2.CaptureResult
-import android.hardware.camera2.TotalCaptureResult
 import android.media.Image
 import android.media.ImageReader
 import android.media.ImageReader.OnImageAvailableListener
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
-import android.support.v4.app.ActivityCompat
-import android.support.v4.app.DialogFragment
-import android.support.v4.app.Fragment
-import android.support.v4.content.ContextCompat
+import android.os.Process
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.Fragment
 import android.util.Log
 import android.util.Size
 import android.util.SparseIntArray
@@ -57,6 +54,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -179,25 +177,6 @@ class PosenetActivity :
   }
 
   /**
-   * A [CameraCaptureSession.CaptureCallback] that handles events related to JPEG capture.
-   */
-  private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
-    override fun onCaptureProgressed(
-      session: CameraCaptureSession,
-      request: CaptureRequest,
-      partialResult: CaptureResult
-    ) {
-    }
-
-    override fun onCaptureCompleted(
-      session: CameraCaptureSession,
-      request: CaptureRequest,
-      result: TotalCaptureResult
-    ) {
-    }
-  }
-
-  /**
    * Shows a [Toast] on the UI thread.
    *
    * @param text The message to show
@@ -271,7 +250,6 @@ class PosenetActivity :
    * Sets up member variables related to camera.
    */
   private fun setUpCameraOutputs() {
-
     val activity = activity
     val manager = activity!!.getSystemService(Context.CAMERA_SERVICE) as CameraManager
     try {
@@ -325,7 +303,9 @@ class PosenetActivity :
    * Opens the camera specified by [PosenetActivity.cameraId].
    */
   private fun openCamera() {
-    val permissionCamera = ContextCompat.checkSelfPermission(activity!!, Manifest.permission.CAMERA)
+    val permissionCamera = getContext()!!.checkPermission(
+      Manifest.permission.CAMERA, Process.myPid(), Process.myUid()
+    )
     if (permissionCamera != PackageManager.PERMISSION_GRANTED) {
       requestCameraPermission()
     }
@@ -442,11 +422,7 @@ class PosenetActivity :
       )
       image.close()
 
-      // Process an image for analysis in every 3 frames.
-      frameCounter = (frameCounter + 1) % 3
-      if (frameCounter == 0) {
-        processImage(rotatedBitmap)
-      }
+      processImage(rotatedBitmap)
     }
   }
 
@@ -596,7 +572,6 @@ class PosenetActivity :
    */
   private fun createCameraPreviewSession() {
     try {
-
       // We capture images from preview in YUV format.
       imageReader = ImageReader.newInstance(
         previewSize!!.width, previewSize!!.height, ImageFormat.YUV_420_888, 2
@@ -635,7 +610,7 @@ class PosenetActivity :
               previewRequest = previewRequestBuilder!!.build()
               captureSession!!.setRepeatingRequest(
                 previewRequest!!,
-                captureCallback, backgroundHandler
+                null, null
               )
             } catch (e: CameraAccessException) {
               Log.e(TAG, e.toString())
