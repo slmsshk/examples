@@ -1,2 +1,16 @@
-rootProject.name = 'TFLite Model Personalization Demo App'
-include ':app', ':transfer_api'
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "TFLite Model Personalization Demo App"
+include ':app'

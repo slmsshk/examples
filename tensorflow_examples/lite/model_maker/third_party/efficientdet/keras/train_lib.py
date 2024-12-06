@@ -395,7 +395,7 @@ class DisplayCallback(tf.keras.callbacks.Callback):
     image = inference.visualize_image(
         self.sample_image[0],
         boxes[0][:length],
-        classes[0].astype(np.int)[:length],
+        classes[0].astype(int)[:length],
         scores[0][:length],
         label_map=self.model.config.label_map,
         min_score_thresh=self.min_score_thresh,
@@ -784,7 +784,11 @@ class EfficientDetNetTrain(efficientdet_keras.EfficientDetNet):
         scaled_loss = total_loss
         optimizer = self.optimizer
     loss_vals['loss'] = total_loss
-    loss_vals['learning_rate'] = optimizer.learning_rate(optimizer.iterations)
+    if hasattr(tf.keras.optimizers, 'experimental') and isinstance(
+        optimizer, tf.keras.optimizers.experimental.Optimizer):
+      loss_vals['learning_rate'] = optimizer.learning_rate
+    else:
+      loss_vals['learning_rate'] = optimizer.learning_rate(optimizer.iterations)
     trainable_vars = self._freeze_vars()
     scaled_gradients = tape.gradient(scaled_loss, trainable_vars)
     if isinstance(self.optimizer,

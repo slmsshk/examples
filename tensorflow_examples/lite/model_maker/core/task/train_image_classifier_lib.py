@@ -24,8 +24,8 @@ import tempfile
 
 import tensorflow.compat.v2 as tf
 from tensorflow_examples.lite.model_maker.core.optimization import warmup
+from tensorflow_examples.lite.model_maker.core.task import make_image_classifier
 from tensorflow_examples.lite.model_maker.core.task import model_util
-from tensorflow_hub.tools.make_image_classifier import make_image_classifier_lib as hub_lib
 
 DEFAULT_DECAY_SAMPLES = 10000 * 256
 DEFAULT_WARMUP_EPOCHS = 2
@@ -39,7 +39,10 @@ def add_params(hparams, **kwargs):
 
 class HParams(
     collections.namedtuple(
-        "HParams", hub_lib.HParams._fields + ("warmup_steps", "model_dir"))):
+        "HParams",
+        make_image_classifier.HParams._fields + ("warmup_steps", "model_dir"),
+    )
+):
   """The hyperparameters for make_image_classifier.
 
   train_epochs: Training will do this many iterations over the dataset.
@@ -62,7 +65,7 @@ class HParams(
 
 def get_default_hparams():
   """Returns a fresh HParams object initialized to default values."""
-  default_hub_hparams = hub_lib.get_default_hparams()
+  default_hub_hparams = make_image_classifier.get_default_hparams()
   as_dict = default_hub_hparams._asdict()
   as_dict.update(
       train_epochs=10,
@@ -87,9 +90,12 @@ def create_optimizer(init_lr, num_decay_steps, num_warmup_steps):
         initial_learning_rate=init_lr,
         decay_schedule_fn=learning_rate_fn,
         warmup_steps=num_warmup_steps)
-  optimizer = tf.keras.optimizers.RMSprop(
-      learning_rate=learning_rate_fn, rho=0.9, momentum=0.9, epsilon=0.001)
-
+  if hasattr(tf.keras.optimizers, "legacy"):
+    optimizer = tf.keras.optimizers.legacy.RMSprop(
+        learning_rate=learning_rate_fn, rho=0.9, momentum=0.9, epsilon=0.001)
+  else:
+    optimizer = tf.keras.optimizers.RMSprop(
+        learning_rate=learning_rate_fn, rho=0.9, momentum=0.9, epsilon=0.001)
   return optimizer
 
 
@@ -131,11 +137,13 @@ def hub_train_model(model, hparams, train_ds, validation_ds, steps_per_epoch):
   """
   loss = tf.keras.losses.CategoricalCrossentropy(
       label_smoothing=hparams.label_smoothing)
-  model.compile(
-      optimizer=tf.keras.optimizers.SGD(
-          learning_rate=hparams.learning_rate, momentum=hparams.momentum),
-      loss=loss,
-      metrics=["accuracy"])
+  if hasattr(tf.keras.optimizers, "legacy"):
+    optimizer = tf.keras.optimizers.legacy.SGD(
+        learning_rate=hparams.learning_rate, momentum=hparams.momentum)
+  else:
+    optimizer = tf.keras.optimizers.SGD(
+        learning_rate=hparams.learning_rate, momentum=hparams.momentum)
+  model.compile(optimizer=optimizer, loss=loss, metrics=["accuracy"])
 
   return model.fit(
       train_ds,

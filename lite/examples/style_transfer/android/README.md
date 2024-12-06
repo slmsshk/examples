@@ -1,46 +1,60 @@
-# Style Transfer Android sample.
+# TensorFlow Lite Style Transfer Demo
+
+### Overview
 
 Artistic style transfer is an optimization technique used to take two images: a
 content image and a style reference image (such as an artwork by a famous
 painter) and blend them together so the output image looks like the content
-image, but “painted” in the style of the style reference image.
+image, but “painted” in the style of the style reference image. These
+instructions walk you through building and running the demo on an Android
+device.
 
-## Requirements
+The model files are downloaded via Gradle scripts when you build and run the
+app. You don't need to do any steps to download TFLite models into the project
+explicitly.
 
-*   Android Studio 4.2 or above (installed on a Linux, Mac or Windows machine)
-*   An Android device, or an Android Emulator
+This application should be run on a physical Android device.
 
-## Build and run
+![Camera screen.](screenshot1.jpg?raw=true "Camera screen")
 
-### Step 1. Clone the TensorFlow examples source code
+![Transformation screen.](screenshot2.jpg?raw=true "Transformation screen")
 
-Clone the TensorFlow examples GitHub repository to your computer to get the demo
-application.
+Test image
+from [Pixabay](https://pixabay.com/photos/tiger-head-face-feline-wild-cat-2923186/)
 
-```
-git clone https://github.com/tensorflow/examples
-```
+## Build the demo using Android Studio
 
-### Step 2. Import the sample app to Android Studio
+### Prerequisites
 
-Open the TensorFlow source code in Android Studio. To do this, open Android
-Studio and select `Import Projects (Gradle, Eclipse ADT, etc.)`, setting the
-folder to `examples/lite/examples/style_transfer/android`
+* The **[Android Studio](https://developer.android.com/studio/index.html)**
+  IDE (Android Studio 2021.2.1 or newer). This sample has been tested on Android
+  Studio Chipmunk.
 
-### Step 3. Run the Android app
+* A physical Android device with a minimum OS version of SDK 23 (Android 6.0 -
+  Marshmallow) with developer mode enabled. The process of enabling developer
+  mode may vary by device.
 
-Connect the Android device to the computer and be sure to approve any ADB
-permission prompts that appear on your phone. Select `Run -> Run app.` Select
-the deployment target in the connected devices to the device on which the app
-will be installed. This will install the app on the device.
+### Building
 
-To test the app, open the app called `TFL Style Transfer` on your device.
-Re-installing the app may require you to uninstall the previous installations.
+* Open Android Studio. From the Welcome screen, select Open an existing Android
+  Studio project.
 
-## Resources used:
+* From the Open File or Project window that appears, navigate to and select the
+  tensorflow-lite/examples/style_transfer/android directory. Click OK.
 
-*   [TensorFlow Lite](https://www.tensorflow.org/lite)
-*   [Style Transfer model for mobile](https://www.tensorflow.org/lite/models/style_transfer/overview)
-*   [Train the style transfer model and export to TensorFlow Lite](https://github.com/tensorflow/magenta/tree/master/magenta/models/arbitrary_image_stylization#train-a-model-on-a-large-dataset-with-data-augmentation-to-run-on-mobile)
-*   [Neural Style Transfer with TensorFlow](https://www.tensorflow.org/tutorials/generative/style_transfer)
-*   [CameraX](https://developer.android.com/training/camerax)
+* If it asks you to do a Gradle Sync, click OK.
+
+* With your Android device connected to your computer and developer mode
+  enabled, click on the green Run arrow in Android Studio.
+
+### Models used
+
+Downloading, extraction, and placing the models into the assets folder is
+managed automatically by the download.gradle file.
+
+### Resources used
+
+* [TensorFlow Lite](https://www.tensorflow.org/lite)
+* [Train the style transfer model and export to TensorFlow Lite](https://github.com/tensorflow/magenta/tree/master/magenta/models/arbitrary_image_stylization#train-a-model-on-a-large-dataset-with-data-augmentation-to-run-on-mobile)
+* [Neural Style Transfer with TensorFlow](https://www.tensorflow.org/tutorials/generative/style_transfer)
+* [CameraX](https://developer.android.com/training/camerax)

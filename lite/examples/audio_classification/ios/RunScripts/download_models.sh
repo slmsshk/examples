@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,32 +17,53 @@
 set -ex
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODELS_URL="https://storage.googleapis.com/download.tensorflow.org/models/tflite/sound_classification/snap_clap.tflite"
+YAMNET_URL="https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/audio_classification/ios/lite-model_yamnet_classification_tflite_1.tflite"
+SPEECH_COMMANDS_URL="https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/audio_classification/ios/speech_commands.tflite"
+
+YAMNET_NAME="yamnet.tflite"
+SPEECH_COMMANDS_NAME="speech_commands.tflite"
+
 DOWNLOADS_DIR=$(mktemp -d)
 
 cd "$SCRIPT_DIR"
 
 download() {
-  local usage="Usage: download URL DIR"
+  local usage="Usage: download_and_extract URL DIR"
   local url="${1:?${usage}}"
   local dir="${2:?${usage}}"
+  local name="${3:?${usage}}"
   echo "downloading ${url}" >&2
   mkdir -p "${dir}"
   tempdir=$(mktemp -d)
 
-  curl -L ${url} > ${tempdir}/sound_classification.tflite
+  curl -L ${url} > ${tempdir}/${name}
   cp -R ${tempdir}/* ${dir}/
   rm -rf ${tempdir}
 }
 
-if [ -f ../SoundClassification/Model/sound_classification.tflite ]
+has_download=false
+
+if [ -f ../AudioClassification/TFLite/${YAMNET_NAME} ]
 then
-echo "File already exists."
-exit 0
+echo "File ${YAMNET_NAME} exists."
+else
+has_download=true
+download "${YAMNET_URL}" "${DOWNLOADS_DIR}/models" "${YAMNET_NAME}"
+file ${DOWNLOADS_DIR}/models
 fi
 
-download "${MODELS_URL}" "${DOWNLOADS_DIR}/models"
-
+if [ -f ../AudioClassification/TFLite/${SPEECH_COMMANDS_NAME} ]
+then
+echo "File ${SPEECH_COMMANDS_NAME} exists."
+else
+has_download=true
+download "${SPEECH_COMMANDS_URL}" "${DOWNLOADS_DIR}/models" "${SPEECH_COMMANDS_NAME}"
 file ${DOWNLOADS_DIR}/models
+fi
 
-cp ${DOWNLOADS_DIR}/models/* ../SoundClassification/Model
+if ${has_download}
+then
+cp ${DOWNLOADS_DIR}/models/* ../AudioClassification/TFLite
+rm -rf ${DOWNLOADS_DIR}
+fi
+

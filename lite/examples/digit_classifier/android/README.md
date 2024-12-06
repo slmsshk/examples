@@ -1,36 +1,46 @@
-# Digit Classifier Android sample
+# TensorFlow Lite Digit Classification Demo Application
 
-<img src="https://storage.googleapis.com/khanhlvg-public.appspot.com/digit-classifier/screenshot_android.png" />
+### Overview
 
-## Requirements
+This is an end-to-end example of a digit classifier model built with TensorFlow
+2.0 (Keras API), and trained on MNIST dataset. The example app allows users to
+draw a number and predict which number it will be. These instructions walk you
+through building and running the demo on an Android device.
 
-*  Android Studio 4.2 or above (installed on a Linux, Mac or Windows machine)
-*  An Android device, or an Android Emulator
+The model files are downloaded via Gradle scripts when you build and run the
+app. You don't need to do any steps to download TFLite models into the project
+explicitly.
 
-## Build and run
+This application should be run on a physical Android device.
 
-### Step 1. Clone the TensorFlow examples source code
+![App example UI.](minst.gif?raw=true "DigitCanvas screen")
 
-Clone the TensorFlow examples GitHub repository to your computer to get the
-demo application.
+## Build the demo using Android Studio
 
-```
-git clone https://github.com/tensorflow/examples
-```
+### Prerequisites
 
-### Step 2. Import the sample app to Android Studio
+* The **[Android Studio](https://developer.android.com/studio/index.html)**
+  IDE (Android Studio 2021.2.1 or newer). This sample has been tested on Android
+  Studio Chipmunk.
 
-Open the TensorFlow source code in Android Studio. To do this, open Android
-Studio and select `Import Projects (Gradle, Eclipse ADT, etc.)`, setting the
-folder to `examples/lite/examples/digit_classifier/android`
+* A physical Android device with a minimum OS version of SDK 23 (Android 6.0 -
+  Marshmallow) with developer mode enabled. The process of enabling developer
+  mode may vary by device.
 
+### Building
 
-### Step 3. Run the Android app
+* Open Android Studio. From the Welcome screen, select Open an existing Android
+  Studio project.
 
-Connect the Android device to the computer and be sure to approve any ADB
-permission prompts that appear on your phone. Select `Run -> Run app.` Select
-the deployment target in the connected devices to the device on which the app
-will be installed. This will install the app on the device.
+* From the Open File or Project window that appears, navigate to and select the
+  tensorflow-lite/examples/digit_classifier/android directory. Click OK.
 
-To test the app, open the app called `Digit Classifier` on your device.
-Re-installing the app may require you to uninstall the previous installations.
+* If it asks you to do a Gradle Sync, click OK.
+
+* With your Android device connected to your computer and developer mode
+  enabled, click on the green Run arrow in Android Studio.
+
+### Models used
+
+Downloading, extraction, and placing the models into the assets folder is
+managed automatically by the download.gradle file.

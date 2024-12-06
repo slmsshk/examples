@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#ffa800</color>
-    <color name="colorPrimaryDark">#ff6f00</color>
-    <color name="colorAccent">#425066</color>
-
-    <color name="semi_transparent">#66000000</color>
-    <color name="toolbar_bg">#ffffff</color>
-    <color name="lightGray">#E4E4E4</color>
+    <!-- TF Branding Orange -->
+    <color name="tflite_orange_color">#FF6F00</color>
+    <color name="toolbar_background">#EEEEEE</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="control_ui_text_color">@android:color/black</color>
 </resources>

@@ -1,4 +1,12 @@
 # Release 0.4
+## 0.4.3
+
+*   Fix the requirement deps issues.
+
+## 0.4.2
+
+*   Fix the version of tflite-support and flatbuffers to be consistent with
+    other packages.
 
 ## 0.4.1
 

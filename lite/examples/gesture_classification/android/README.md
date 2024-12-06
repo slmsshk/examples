@@ -1,48 +1,54 @@
-# TensorFlow Lite Gesture Classification Android Example
+# TensorFlow Lite Gesture Classification
 
 ### Overview
 
-This app performs gesture classification on live camera feed and displays the results in real-time on the screen.
+This is a camera app that continuously classifies the gesture in the frames seen
+by your device's front camera. These instructions walk you through building and
+running the demo on an Android device.
 
-Application can run either on device or emulator.
+The model files are downloaded via Gradle scripts when you build and run the
+app. You don't need to do any steps to download TFLite models into the project
+explicitly.
 
-<!-- TODO(b/124116863): Add app screenshot. -->
+We trained the model with the following hand gesture images.
+![Training images](gesture_training_image.png "Training images")
+
+This application should be run on a physical Android device.
+
+![App example showing UI controls. Result is down.](
+gesture_classification_screen_shot.jpeg?raw=true "Screenshot with controls")
 
 ## Build the demo using Android Studio
 
 ### Prerequisites
 
-* If you don't have already, install **[Android Studio](https://developer.android.com/studio/index.html)**, following the instructions on their website.
-* You need an Android device and Android development environment with minimum API 21.
-* Android Studio 4.2 or above.
+* The **[Android Studio](https://developer.android.com/studio/index.html)**
+  IDE (Android Studio 2021.2.1 or newer). This sample has been tested on Android
+  Studio Chipmunk.
 
-* This is the  **[guide](../web/README.md)**  to generate TensorFlow.js model.
-* Name the .tflite file as **model.tflite** and the subset of labels should be named as **labels.txt**.
+* A physical Android device with a minimum OS version of SDK 23 (Android 6.0 -
+  Marshmallow) with developer mode enabled. The process of enabling developer
+  mode may vary by device.
 
 ### Building
 
-* Open Android Studio, and from the Welcome screen, select Open an existing Android Studio project.
+* Open Android Studio. From the Welcome screen, select Open an existing Android
+  Studio project.
 
-* From the Open File or Project window that appears, navigate to and select the tensorflow-lite/examples/gesture_classification/android directory from wherever you cloned the TensorFlow Lite sample GitHub repo. Click OK.
+* From the Open File or Project window that appears, navigate to and select the
+  tensorflow-lite/examples/gesture_classification/android directory. Click OK.
 
 * If it asks you to do a Gradle Sync, click OK.
 
-* You may also need to install various platforms and tools, if you get errors like "Failed to find target with hash string 'android-21'" and similar.
-Click the Run button (the green arrow) or select Run > Run 'android' from the top menu. You may need to rebuild the project using Build > Rebuild Project.
+* With your Android device connected to your computer and developer mode
+  enabled, click on the green Run arrow in Android Studio.
 
-* If it asks you to use Instant Run, click Proceed Without Instant Run.
+### Customize your model
 
-* Also, you need to have an Android device plugged in with developer options enabled at this point. See **[here](https://developer.android.com/studio/run/device)** for more details on setting up developer devices.
 * Read the following **[doc](../ml/README.md)** to generate TFLite model file.
-* Copy the labels.txt and put into assets folder.
-* Now once you get the TFLite and label file, put that into assets folder.
 
-### Additional Note
+* Add the metadata to the tflite model using this [Colab notebook](
+https://colab.research.google.com/github/tensorflow/examples/blob/master/lite/examples/gesture_classification/android/adding_metadata_to_tflite_model_colab_notebook.ipynb)
 
-Ensure that labels.txt and model.tflite files are added into the project which are downloaded from [web app](../web/README.md). Also ensure gesture_labels.txt file is not deleted or modified from assets folder.
-
-## See Also
-
-* [Gesture Web Application](../web/README.md)
-* [Gesture ML Script](../ml/README.md)
-* [Gesture iOS Example](../ios/README.md)
+* Copy the downloaded model into app/src/main/assets folder. Make sure the
+  model is named model_metadata.tflite for this sample.
